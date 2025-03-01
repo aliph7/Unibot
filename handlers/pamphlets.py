@@ -2,13 +2,13 @@ from aiogram import types, Dispatcher
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from datetime import datetime
-import sqlite3
 import logging
 from itertools import chain
 
 from states.states import BotStates
 from config.config import DEPARTMENTS, COURSES
 from keyboards.keyboards import get_main_keyboard, get_pamphlets_keyboard
+from database import add_pamphlet, get_pamphlets  # توابع MongoDB
 
 logger = logging.getLogger(__name__)
 
@@ -102,24 +102,20 @@ async def process_pamphlet_upload(message: types.Message, state: FSMContext):
     department = data.get('department')
     course = data.get('course')
     
-    conn = sqlite3.connect('university_bot.db')
-    c = conn.cursor()
     try:
-        c.execute('''INSERT INTO pamphlets (title, file_id, department, course, uploaded_by, upload_date)
-                     VALUES (?, ?, ?, ?, ?, ?)''',
-                     (message.document.file_name,
-                      message.document.file_id,
-                      department,
-                      course,
-                      message.from_user.username,
-                      datetime.now().strftime("%Y-%m-%d")))
-        conn.commit()
+        add_pamphlet(
+            title=message.document.file_name,
+            file_id=message.document.file_id,
+            department=department,
+            course=course,
+            uploaded_by=message.from_user.username or str(message.from_user.id),
+            upload_date=datetime.now().strftime("%Y-%m-%d")
+        )
         await message.reply("✅ جزوه با موفقیت آپلود شد.", reply_markup=get_pamphlets_keyboard())
         await state.clear()
     except Exception as e:
+        logger.error(f"Error uploading pamphlet: {e}")
         await message.reply("❌ خطا در آپلود جزوه.")
-    finally:
-        conn.close()
 
 async def view_pamphlets(message: types.Message, state: FSMContext):
     """نمایش لیست جزوات"""
@@ -218,30 +214,26 @@ async def process_pamphlet_search(message: types.Message, state: FSMContext):
 
     search_term = message.text.lower()
     
-    conn = sqlite3.connect('university_bot.db')
-    c = conn.cursor()
     try:
-        c.execute('''SELECT title, course, file_id 
-                     FROM pamphlets 
-                     WHERE LOWER(title) LIKE ? OR LOWER(course) LIKE ?''',
-                  (f'%{search_term}%', f'%{search_term}%'))
-        pamphlets = c.fetchall()
+        pamphlets = get_pamphlets()  # همه جزوات رو می‌گیره
+        filtered_pamphlets = [
+            p for p in pamphlets
+            if search_term in p["title"].lower() or search_term in p["course"].lower()
+        ]
         
-        if not pamphlets:
+        if not filtered_pamphlets:
             await message.reply("❌ هیچ جزوه‌ای با این عبارت پیدا نشد.")
             return
             
         await message.reply(f"🔍 نتایج جستجو برای '{message.text}':")
-        for title, course, file_id in pamphlets:
+        for pamphlet in filtered_pamphlets:
             await message.reply_document(
-                file_id,
-                caption=f"📝 عنوان: {title}\n📚 درس: {course}"
+                pamphlet["file_id"],
+                caption=f"📝 عنوان: {pamphlet['title']}\n📚 درس: {pamphlet['course']}"
             )
     except Exception as e:
         logger.error(f"Error in process_pamphlet_search: {e}")
         await message.reply("❌ خطا در جستجوی جزوه.")
-    finally:
-        conn.close()
 
 async def show_course_pamphlets(message: types.Message, state: FSMContext):
     """نمایش جزوات یک درس خاص"""
@@ -251,30 +243,22 @@ async def show_course_pamphlets(message: types.Message, state: FSMContext):
     if not department or message.text not in COURSES[department]:
         return
 
-    conn = sqlite3.connect('university_bot.db')
-    c = conn.cursor()
     try:
-        c.execute('''SELECT title, file_id 
-                     FROM pamphlets 
-                     WHERE department = ? AND course = ?
-                     ORDER BY upload_date DESC''', (department, message.text))
-        pamphlets = c.fetchall()
+        pamphlets = get_pamphlets(department=department, course=message.text)
         
         if not pamphlets:
             await message.reply("❌ هیچ جزوه‌ای برای این درس موجود نیست.")
             return
             
         await message.reply(f"📚 جزوات درس {message.text}:")
-        for title, file_id in pamphlets:
+        for pamphlet in pamphlets:
             await message.reply_document(
-                file_id,
-                caption=f"📝 عنوان: {title}"
+                pamphlet["file_id"],
+                caption=f"📝 عنوان: {pamphlet['title']}"
             )
     except Exception as e:
         logger.error(f"Error in show_course_pamphlets: {e}")
         await message.reply("❌ خطا در نمایش جزوات.")
-    finally:
-        conn.close()
 
 async def return_to_departments(message: types.Message, state: FSMContext):
     """برگشت به لیست رشته‌ها"""
@@ -288,28 +272,24 @@ async def return_to_departments(message: types.Message, state: FSMContext):
         resize_keyboard=True
     )
     await message.reply("لطفاً رشته مورد نظر را انتخاب کنید:", reply_markup=keyboard)
-    await state.clear()  # پاک کردن وضعیت قبلی
+    await state.clear()
 
 def register_handlers(dp: Dispatcher):
     """ثبت تمام هندلرهای مربوط به جزوات"""
-    # هندلرهای منوی اصلی
     dp.message.register(show_pamphlets_menu, lambda message: message.text == "📚 جزوات")
     dp.message.register(return_to_pamphlets, lambda message: message.text == "🔙 برگشت به بخش جزوات")
     dp.message.register(start_upload_pamphlet, lambda message: message.text == "آپلود جزوه 📤")
     dp.message.register(view_pamphlets, lambda message: message.text == "مشاهده جزوات 📖")
     dp.message.register(start_pamphlet_search, lambda message: message.text == "جستجوی جزوه 🔍")
     
-    # هندلرهای آپلود جزوه - اولویت بالاتر
     dp.message.register(process_upload_department, lambda message: message.text and message.text.endswith("📤"), BotStates.waiting_for_upload_department)
     dp.message.register(process_upload_course, lambda message: message.text and message.text.endswith("📤"), BotStates.waiting_for_upload_course)
     dp.message.register(return_to_upload_departments, lambda message: message.text == "🔙 برگشت به لیست رشته‌ها", BotStates.waiting_for_upload_course)
     dp.message.register(return_to_upload_courses, lambda message: message.text == "🔙 برگشت به لیست درس‌ها", BotStates.waiting_for_pamphlet)
     dp.message.register(process_pamphlet_upload, BotStates.waiting_for_pamphlet)
     
-    # هندلرهای مشاهده جزوات - اولویت پایین‌تر
     dp.message.register(show_department_pamphlets, lambda message: message.text in DEPARTMENTS, BotStates.waiting_for_view_department)
     dp.message.register(show_course_pamphlets, lambda message: message.text in list(chain.from_iterable(COURSES.values())), BotStates.waiting_for_view_course)
     dp.message.register(return_to_departments, lambda message: message.text == "🔙 برگشت به لیست رشته‌ها", BotStates.waiting_for_view_course)
     
-    # هندلرهای جستجو
-    dp.message.register(process_pamphlet_search, BotStates.waiting_for_pamphlet_search) 
+    dp.message.register(process_pamphlet_search, BotStates.waiting_for_pamphlet_search)
