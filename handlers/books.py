@@ -2,7 +2,6 @@ from aiogram import types, Dispatcher
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from datetime import datetime
-import sqlite3
 import logging
 import sys
 from pathlib import Path
@@ -12,6 +11,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from states.states import BotStates
 from keyboards.keyboards import get_main_keyboard
+from database import add_book, get_books  # توابع MongoDB
 
 logger = logging.getLogger(__name__)
 
@@ -47,23 +47,19 @@ async def process_book_upload(message: types.Message, state: FSMContext):
         await message.reply("❌ لطفاً فقط فایل PDF ارسال کنید.")
         return
 
-    conn = sqlite3.connect('university_bot.db')
-    c = conn.cursor()
     try:
-        c.execute('''INSERT INTO books (title, file_id, uploaded_by, upload_date)
-                     VALUES (?, ?, ?, ?)''',
-                     (message.document.file_name,
-                      message.document.file_id,
-                      message.from_user.username,
-                      datetime.now().strftime("%Y-%m-%d")))
-        conn.commit()
+        add_book(
+            title=message.document.file_name,
+            file_id=message.document.file_id,
+            uploaded_by=message.from_user.username or str(message.from_user.id),
+            upload_date=datetime.now().strftime("%Y-%m-%d")
+        )
         await message.reply("✅ کتاب با موفقیت آپلود شد.")
         await show_books_menu(message)
         await state.clear()
     except Exception as e:
+        logger.error(f"Error uploading book: {e}")
         await message.reply("❌ خطا در آپلود کتاب.")
-    finally:
-        conn.close()
 
 async def search_book(message: types.Message, state: FSMContext):
     """شروع جستجوی کتاب"""
@@ -83,25 +79,22 @@ async def process_book_search(message: types.Message, state: FSMContext):
         await show_books_menu(message)
         return
         
-    conn = sqlite3.connect('university_bot.db')
-    c = conn.cursor()
     try:
-        c.execute('SELECT title, file_id FROM books WHERE title LIKE ?', (f'%{search_term}%',))
-        results = c.fetchall()
+        books = get_books()
+        filtered_books = [b for b in books if search_term.lower() in b["title"].lower()]
         
-        if not results:
+        if not filtered_books:
             await message.reply("❌ کتابی با این عنوان یافت نشد.")
             return
             
-        for title, file_id in results:
+        for book in filtered_books:
             await message.reply_document(
-                file_id,
-                caption=f"📚 عنوان: {title}"
+                book["file_id"],
+                caption=f"📚 عنوان: {book['title']}"
             )
     except Exception as e:
+        logger.error(f"Error in book search: {e}")
         await message.reply("❌ خطا در جستجوی کتاب.")
-    finally:
-        conn.close()
 
 async def return_to_books(message: types.Message, state: FSMContext):
     """برگشت به منوی کتاب‌ها"""
@@ -114,27 +107,24 @@ async def return_to_books(message: types.Message, state: FSMContext):
 async def view_books(message: types.Message):
     """نمایش لیست کتاب‌ها"""
     logger.info("Viewing books list")
-    conn = sqlite3.connect('university_bot.db')
-    c = conn.cursor()
     try:
-        c.execute('SELECT title, file_id FROM books ORDER BY upload_date DESC LIMIT 10')
-        books = c.fetchall()
-        
+        books = get_books()
         if not books:
             await message.reply("❌ هیچ کتابی موجود نیست.")
             return
             
+        # محدود کردن به 10 کتاب آخر (مثل کد قبلی)
+        recent_books = sorted(books, key=lambda x: x["upload_date"], reverse=True)[:10]
+        
         await message.reply("📚 آخرین کتاب‌های آپلود شده:")
-        for title, file_id in books:
+        for book in recent_books:
             await message.reply_document(
-                file_id,
-                caption=f"📖 عنوان: {title}"
+                book["file_id"],
+                caption=f"📖 عنوان: {book['title']}"
             )
     except Exception as e:
         logger.error(f"Error in view_books: {e}")
         await message.reply("❌ خطا در نمایش کتاب‌ها.")
-    finally:
-        conn.close()
 
 def register_handlers(dp: Dispatcher):
     """ثبت تمام هندلرهای مربوط به کتاب‌ها"""
@@ -144,4 +134,4 @@ def register_handlers(dp: Dispatcher):
     dp.message.register(search_book, lambda message: message.text == "🔍 جستجوی کتاب")
     dp.message.register(view_books, lambda message: message.text == "مشاهده کتاب‌ها 📚")
     dp.message.register(process_book_search, BotStates.waiting_for_book_search)
-    dp.message.register(process_book_upload, BotStates.waiting_for_book) 
+    dp.message.register(process_book_upload, BotStates.waiting_for_book)
