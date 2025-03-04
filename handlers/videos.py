@@ -2,11 +2,16 @@ from aiogram import types, Dispatcher
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from datetime import datetime
-import sqlite3
 import logging
+import sys
+from pathlib import Path
+
+# اضافه کردن مسیر اصلی پروژه به sys.path
+sys.path.append(str(Path(__file__).parent.parent))
 
 from states.states import BotStates
 from keyboards.keyboards import get_main_keyboard
+from database import add_video, get_videos  # توابع MongoDB
 
 logger = logging.getLogger(__name__)
 
@@ -79,28 +84,23 @@ async def process_video_caption(message: types.Message, state: FSMContext):
         return
 
     try:
-        # ذخیره ویدیو با کپشن در دیتابیس
-        conn = sqlite3.connect('university_bot.db')
-        c = conn.cursor()
-        c.execute('''INSERT INTO videos 
-                    (file_id, file_unique_id, caption, uploaded_by, upload_date)
-                    VALUES (?, ?, ?, ?, ?)''',
-                 (video_file_id, data.get('video_file_unique_id'), caption,
-                  message.from_user.id, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-        conn.commit()
-        
+        add_video(
+            file_id=video_file_id,
+            file_unique_id=data.get('video_file_unique_id'),
+            caption=caption,
+            uploaded_by=message.from_user.id,
+            upload_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        )
         await message.reply("✅ ویدیو با موفقیت آپلود و ذخیره شد.")
         # ارسال مجدد ویدیو با کپشن جدید
         await message.reply_video(
             video_file_id,
             caption=caption
         )
-        
     except Exception as e:
         logger.error(f"Error in process_video_caption: {e}")
         await message.reply("❌ خطا در ذخیره‌سازی ویدیو. لطفاً دوباره تلاش کنید.")
     finally:
-        conn.close()
         await state.clear()  # پاک کردن وضعیت
         await show_videos_menu(message)  # برگشت به منوی ویدیوها بعد از اتمام کار
 
@@ -124,43 +124,27 @@ async def process_video_search(message: types.Message, state: FSMContext):
         await show_videos_menu(message)
         return
         
-    conn = sqlite3.connect('university_bot.db')
-    c = conn.cursor()
     try:
-        c.execute('SELECT caption, file_id FROM videos WHERE caption LIKE ?', (f'%{search_term}%',))
-        results = c.fetchall()
+        videos = get_videos()
+        filtered_videos = [v for v in videos if search_term.lower() in v["caption"].lower()]
         
-        if not results:
+        if not filtered_videos:
             await message.reply("❌ ویدیویی با این عنوان یافت نشد.")
             return
             
-        for caption, file_id in results:
+        for video in filtered_videos:
             await message.reply_video(
-                file_id,
-                caption=f"🎥 {caption}"
+                video["file_id"],
+                caption=f"🎥 {video['caption']}"
             )
     except Exception as e:
         logger.error(f"Error in process_video_search: {e}")
         await message.reply("❌ خطا در جستجوی ویدیو.")
-    finally:
-        conn.close()
-
-async def show_department_courses(message: types.Message, department: str):
-    """نمایش دوره‌های مربوط به یک رشته خاص"""
-    # کد مربوط به نمایش دوره‌ها
-    pass
-
-async def process_department_selection(message: types.Message, state: FSMContext):
-    """پردازش انتخاب رشته"""
-    department = message.text  # فرض بر این است که رشته به درستی انتخاب شده است
-    await state.update_data(department=department)  # ذخیره رشته
-    # ادامه کد برای انتخاب درس
 
 async def return_to_video_section(message: types.Message, state: FSMContext):
     """برگشت به بخش ویدیوها از هر وضعیتی"""
     logger.info(f"Current state before returning: {await state.get_state()}")
     
-    # بدون نیاز به بررسی وضعیت فعلی، وضعیت را پاک می‌کنیم و به منوی ویدیوها برمی‌گردیم
     await state.clear()
     await show_videos_menu(message)
     
@@ -169,56 +153,19 @@ async def return_to_video_section(message: types.Message, state: FSMContext):
 async def return_to_main_menu(message: types.Message, state: FSMContext):
     """برگشت به منوی اصلی"""
     await state.clear()
-    # اینجا تابع منوی اصلی خود را فراخوانی کنید
     await message.reply("به منوی اصلی بازگشتید.", reply_markup=get_main_keyboard())
 
 def register_handlers(dp: Dispatcher):
     """ثبت تمام هندلرهای مربوط به ویدیوها"""
-    # هندلرهای اصلی منوی ویدیو
     dp.message.register(show_videos_menu, lambda message: message.text == "🎥 ویدیوهای آموزشی")
     dp.message.register(start_upload_video, lambda message: message.text == "آپلود ویدیو 📤")
     dp.message.register(search_video, lambda message: message.text == "🔍 جستجوی ویدیو")
     dp.message.register(return_to_main_menu, lambda message: message.text == "🔙 برگشت به منوی اصلی")
     
-    # هندلرهای حالت‌های مختلف
     dp.message.register(process_video_search, BotStates.waiting_for_video_search)
     dp.message.register(process_video_upload, lambda message: message.video is not None, BotStates.waiting_for_video)
     dp.message.register(process_video_caption, BotStates.waiting_for_video_caption)
-    dp.message.register(process_department_selection, lambda message: message.text in ["ریاضی", "فیزیک", "شیمی", "زیستی", "تربیت بدنی"], BotStates.waiting_for_department)
     
-    # هندلرهای برگشت برای حالت‌های مختلف
-    # دکمه "برگشت به بخش ویدیوها" در تمام حالت‌ها
     dp.message.register(return_to_video_section, lambda message: message.text == "🔙 برگشت به بخش ویدیوها", BotStates.waiting_for_video)
     dp.message.register(return_to_video_section, lambda message: message.text == "🔙 برگشت به بخش ویدیوها", BotStates.waiting_for_video_caption)
     dp.message.register(return_to_video_section, lambda message: message.text == "🔙 برگشت به بخش ویدیوها", BotStates.waiting_for_video_search)
-    
-    # همچنین برای دکمه "برگشت به لیست ویدیوها" که در بعضی کیبوردها استفاده شده
-    dp.message.register(return_to_video_section, lambda message: message.text == "🔙 برگشت به لیست ویدیوها", BotStates.waiting_for_video)
-    dp.message.register(return_to_video_section, lambda message: message.text == "🔙 برگشت به لیست ویدیوها", BotStates.waiting_for_video_caption)
-    dp.message.register(return_to_video_section, lambda message: message.text == "🔙 برگشت به لیست ویدیوها", BotStates.waiting_for_video_search)
-
-# در ابتدای اجرا - اتصال به دیتابیس و ایجاد جدول‌ها
-def setup_database():
-    """ایجاد جدول‌های مورد نیاز در دیتابیس"""
-    conn = sqlite3.connect('university_bot.db')
-    c = conn.cursor()
-
-    # ایجاد جدول videos
-    c.execute('''
-    CREATE TABLE IF NOT EXISTS videos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_id TEXT NOT NULL,
-        file_unique_id TEXT NOT NULL,
-        caption TEXT,
-        uploaded_by INTEGER,
-        upload_date TEXT
-    );
-    ''')
-
-    # ذخیره تغییرات و بستن اتصال
-    conn.commit()
-    conn.close()
-    logger.info("Database setup completed.")
-
-# اجرای تنظیم دیتابیس در زمان آغاز برنامه
-setup_database()
