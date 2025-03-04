@@ -11,22 +11,20 @@ db = client["university_bot"]
 # مجموعه‌ها (معادل جداول SQLite)
 pamphlets_collection = db["pamphlets"]
 books_collection = db["books"]
-videos_collection = db["educational_videos"]
+videos_collection = db["videos"]  # اسم رو با handlers هماهنگ کردم
 
 def setup_database():
-    """راه‌اندازی دیتابیس و ایجاد مجموعه‌های مورد نیاز"""
+    """تست اتصال به دیتابیس MongoDB"""
     try:
-        # MongoDB خودش مجموعه‌ها رو موقع اولین استفاده می‌سازه
-        # نیازی به ایجاد دستی نیست، ولی می‌تونیم چک کنیم اتصال برقراره
-        client.server_info()  # تست اتصال به سرور MongoDB
-        logger.info("Database setup completed successfully")
-        
+        client.server_info()  # چک کردن اتصال
+        logger.info("Connected to MongoDB successfully")
     except Exception as e:
-        logger.error(f"Error setting up database: {e}")
+        logger.error(f"Failed to connect to MongoDB: {e}")
         raise e
 
 # توابع برای مدیریت pamphlets
 def add_pamphlet(title, file_id, department, course, uploaded_by, upload_date):
+    """اضافه کردن یه جزوه جدید"""
     pamphlet = {
         "title": title,
         "file_id": file_id,
@@ -39,6 +37,7 @@ def add_pamphlet(title, file_id, department, course, uploaded_by, upload_date):
     return result.inserted_id
 
 def get_pamphlets(department=None, course=None):
+    """گرفتن لیست جزوات با فیلتر اختیاری"""
     query = {}
     if department:
         query["department"] = department
@@ -48,6 +47,7 @@ def get_pamphlets(department=None, course=None):
 
 # توابع برای مدیریت books
 def add_book(title, file_id, uploaded_by, upload_date):
+    """اضافه کردن یه کتاب جدید"""
     book = {
         "title": title,
         "file_id": file_id,
@@ -58,13 +58,16 @@ def add_book(title, file_id, uploaded_by, upload_date):
     return result.inserted_id
 
 def get_books():
+    """گرفتن لیست همه کتاب‌ها"""
     return list(books_collection.find({}))
 
 # توابع برای مدیریت videos
-def add_video(title, file_id, uploaded_by, upload_date):
+def add_video(file_id, file_unique_id, caption, uploaded_by, upload_date):
+    """اضافه کردن یه ویدیو جدید"""
     video = {
-        "title": title,
         "file_id": file_id,
+        "file_unique_id": file_unique_id,
+        "caption": caption,
         "uploaded_by": uploaded_by,
         "upload_date": upload_date
     }
@@ -72,4 +75,5 @@ def add_video(title, file_id, uploaded_by, upload_date):
     return result.inserted_id
 
 def get_videos():
+    """گرفتن لیست همه ویدیوها"""
     return list(videos_collection.find({}))
