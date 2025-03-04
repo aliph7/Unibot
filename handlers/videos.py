@@ -11,7 +11,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from states.states import BotStates
 from keyboards.keyboards import get_main_keyboard
-from database import add_video, get_videos  # توابع MongoDB
+from db import add_video, get_videos  # توابع MongoDB
 
 logger = logging.getLogger(__name__)
 
