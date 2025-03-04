@@ -3,7 +3,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from config.config import Config
-from db import setup_database
+from database.db import setup_database
 from handlers import start, pamphlets, books, videos
 
 # تنظیم لاگینگ
