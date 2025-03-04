@@ -8,7 +8,7 @@ from itertools import chain
 from states.states import BotStates
 from config.config import DEPARTMENTS, COURSES
 from keyboards.keyboards import get_main_keyboard, get_pamphlets_keyboard
-from database import add_pamphlet, get_pamphlets  # توابع MongoDB
+from db import add_pamphlet, get_pamphlets  # توابع MongoDB
 
 logger = logging.getLogger(__name__)
 
