@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 import sys
 from pathlib import Path
 
+# اضافه کردن مسیر اصلی پروژه به sys.path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from keyboards.keyboards import get_main_keyboard
@@ -41,4 +42,4 @@ def register_handlers(dp: Dispatcher):
     """ثبت هندلرها"""
     dp.message.register(cmd_start, CommandStart())
     dp.message.register(cmd_help, Command("help"))
-    dp.message.register(return_to_main_menu, lambda message: message.text == "🔙 برگشت به منوی اصلی") 
+    dp.message.register(return_to_main_menu, lambda message: message.text == "🔙 برگشت به منوی اصلی")
