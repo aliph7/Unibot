@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 from aiogram import Bot, Dispatcher
@@ -15,16 +14,16 @@ logger = logging.getLogger(__name__)
 
 # تنظیمات Webhook
 WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = "https://unibot-vfzt.onrender.com" + WEBHOOK_PATH  # URL رباتت رو اینجا بذار
+WEBHOOK_URL = "https://your-bot-name.onrender.com" + WEBHOOK_PATH  # URL رباتت رو اینجا بذار
 WEBAPP_HOST = "0.0.0.0"
-WEBAPP_PORT = int(os.getenv("PORT", 8080))  # Render پورت رو از متغیر PORT می‌گیره
+WEBAPP_PORT = int(os.getenv("PORT", 8080))
 
 async def on_startup(bot: Bot):
     """تنظیم Webhook موقع شروع"""
     logger.info("Setting up webhook...")
     await bot.set_webhook(url=WEBHOOK_URL)
 
-async def main():
+def main():
     try:
         # تنظیمات اولیه
         logger.info("Starting bot...")
@@ -55,7 +54,7 @@ async def main():
         
         # شروع سرور
         logger.info(f"Starting webhook server on {WEBAPP_HOST}:{WEBAPP_PORT}...")
-        await web.run_app(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
+        web.run_app(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
         
     except Exception as e:
         logger.error(f"Error occurred: {e}")
@@ -65,6 +64,6 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped!")
