@@ -1,7 +1,10 @@
 import asyncio
 import logging
+import os
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 from config.config import Config
 from database.db import setup_database
 from handlers import start, pamphlets, books, videos
@@ -9,6 +12,17 @@ from handlers import start, pamphlets, books, videos
 # تنظیم لاگینگ
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# تنظیمات Webhook
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_URL = "https://unibot-vfzt.onrender.com" + WEBHOOK_PATH  # URL رباتت رو اینجا بذار
+WEBAPP_HOST = "0.0.0.0"
+WEBAPP_PORT = int(os.getenv("PORT", 8080))  # Render پورت رو از متغیر PORT می‌گیره
+
+async def on_startup(bot: Bot):
+    """تنظیم Webhook موقع شروع"""
+    logger.info("Setting up webhook...")
+    await bot.set_webhook(url=WEBHOOK_URL)
 
 async def main():
     try:
@@ -30,9 +44,18 @@ async def main():
         pamphlets.register_handlers(dp)
         videos.register_handlers(dp)
         
-        # شروع پولینگ
-        logger.info("Bot is running...")
-        await dp.start_polling(bot)
+        # تنظیم Webhook
+        dp.startup.register(on_startup)
+        
+        # تنظیم سرور aiohttp
+        app = web.Application()
+        webhook_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
+        webhook_handler.register(app, path=WEBHOOK_PATH)
+        setup_application(app, dp, bot=bot)
+        
+        # شروع سرور
+        logger.info(f"Starting webhook server on {WEBAPP_HOST}:{WEBAPP_PORT}...")
+        await web.run_app(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
         
     except Exception as e:
         logger.error(f"Error occurred: {e}")
