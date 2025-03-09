@@ -48,7 +48,7 @@ ban_menu = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-async def cmd_boss(message: types.Message, state: FSMContext):
+async def cmd_boss(message:TransferredType, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         await message.reply("❌ شما دسترسی به این بخش را ندارید!")
         return
@@ -64,17 +64,17 @@ async def list_files(message: types.Message, state: FSMContext):
         books = get_books()
         videos = get_videos()
         
-        response = "📂 **لیست فایل‌ها:**\n\n"
-        response += "📝 **جزوات:**\n" + ("".join(f"- {p['title']} (ID: {p.get('id', 'نامشخص')})\n  👤 ID: {p.get('uploaded_by', 'ناشناس')}\n\n" for p in pamphlets) or "❌ هیچ جزوه‌ای نیست\n\n")
-        response += "📚 **کتاب‌ها:**\n" + ("".join(f"- {b['title']} (ID: {b.get('id', 'نامشخص')})\n  👤 ID: {b.get('uploaded_by', 'ناشناس')}\n\n" for b in books) or "❌ هیچ کتابی نیست\n\n")
-        response += "🎬 **ویدیوها:**\n" + ("".join(f"- {v.get('caption', 'بدون کپشن')} (ID: {v.get('id', 'نامشخص')})\n  👤 ID: {v.get('uploaded_by', 'ناشناس')}\n\n" for v in videos) or "❌ هیچ ویدیویی نیست\n\n")
+        response = "📂 لیست فایل‌ها:\n\n"
+        response += "📝 جزوات:\n" + ("".join(f"- {p['title']} (ID: {p.get('id', 'نامشخص')})\n  👤 ID: {p.get('uploaded_by', 'ناشناس')}\n\n" for p in pamphlets) or "❌ هیچ جزوه‌ای نیست\n\n")
+        response += "📚 کتاب‌ها:\n" + ("".join(f"- {b['title']} (ID: {b.get('id', 'نامشخص')})\n  👤 ID: {b.get('uploaded_by', 'ناشناس')}\n\n" for b in books) or "❌ هیچ کتابی نیست\n\n")
+        response += "🎬 ویدیوها:\n" + ("".join(f"- {v.get('caption', 'بدون کپشن')} (ID: {v.get('id', 'نامشخص')})\n  👤 ID: {v.get('uploaded_by', 'ناشناس')}\n\n" for v in videos) or "❌ هیچ ویدیویی نیست\n\n")
         
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
             for part in parts:
-                await message.reply(part, parse_mode="Markdown")
+                await message.reply(part)
         else:
-            await message.reply(response, parse_mode="Markdown")
+            await message.reply(response)
         logger.info(f"File list sent to admin: {message.from_user.id}")
     except Exception as e:
         logger.error(f"Error in list_files: {e}")
@@ -84,7 +84,7 @@ async def show_stats(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID or await state.get_state() != AdminStates.admin_panel:
         return
     try:
-        stats = "📊 **آمار ربات:**\n\n"
+        stats = "📊 آمار ربات:\n\n"
         stats += f"تعداد جزوات: {len(get_pamphlets())}\n"
         stats += f"تعداد کتاب‌ها: {len(get_books())}\n"
         stats += f"تعداد ویدیوها: {len(get_videos())}\n"
@@ -100,21 +100,23 @@ async def ban_user_cmd(message: types.Message, state: FSMContext):
         return
     try:
         users = get_all_users()
+        logger.info(f"Users retrieved: {users}")
         if not users:
             await message.reply("❌ هیچ کاربری یافت نشد! لطفاً مطمئن شو کاربران توی دیتابیس ثبت شدن.", reply_markup=admin_menu)
             return
-        response = "👥 **لیست کاربران:**\n\n"
+        response = "👥 لیست کاربران:\n\n"
         for user_id, is_banned in users:
             if user_id.isdigit():
-                response += f"👤 `{user_id}` - {('🚫 بن شده' if is_banned else '✅ فعال')}\n"
+                response += f"👤 {user_id} - {'🚫 بن شده' if is_banned else '✅ فعال'}\n"
             else:
-                response += f"👤 `{user_id}` - {('🚫 بن شده' if is_banned else '✅ فعال')} (⚠️ این usernameه، لطفاً توی دیتابیس به user_id عددی تغییر بده)\n"
+                response += f"👤 {user_id} - {'🚫 بن شده' if is_banned else '✅ فعال'} (⚠️ این usernameه، لطفاً توی دیتابیس به user_id عددی تغییر بده)\n"
         response += "\nبرای بن یا آن‌بن کردن، از دکمه‌ها استفاده کنید:"
-        await message.reply(response, parse_mode="Markdown", reply_markup=ban_menu)
+        logger.info(f"Sending response: {response}")
+        await message.reply(response, reply_markup=ban_menu)  # بدون Markdown
         await state.set_state(AdminStates.admin_panel)
     except Exception as e:
         logger.error(f"Error in ban_user_cmd: {e}")
-        await message.reply(f"❌ خطا در گرفتن لیست کاربران: {str(e)} دوباره تلاش کن.", reply_markup=admin_menu)
+        await message.reply(f"❌ خطا در گرفتن لیست کاربران: {str(e)}. دوباره تلاش کن.", reply_markup=admin_menu)
 
 async def ban_user_start(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
@@ -187,7 +189,7 @@ async def delete_pamphlet_cmd(message: types.Message, state: FSMContext):
         if not pamphlets:
             await message.reply("❌ هیچ جزوه‌ای نیست!", reply_markup=delete_menu)
             return
-        response = "📝 **لیست جزوات:**\n\n" + "".join(f"- {p['title']} (ID: {p.get('id', 'نامشخص')})\n  👤 ID: {p.get('uploaded_by', 'ناشناس')}\n\n" for p in pamphlets) + "ID جزوه رو وارد کن:"
+        response = "📝 لیست جزوات:\n\n" + "".join(f"- {p['title']} (ID: {p.get('id', 'نامشخص')})\n  👤 ID: {p.get('uploaded_by', 'ناشناس')}\n\n" for p in pamphlets) + "ID جزوه رو وارد کن:"
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
             for part in parts[:-1]:
@@ -234,7 +236,7 @@ async def delete_book_cmd(message: types.Message, state: FSMContext):
             await message.reply("❌ هیچ کتابی نیست!", reply_markup=delete_menu)
             logger.info("No books found in database")
             return
-        response = "📚 **لیست کتاب‌ها:**\n\n" + "".join(f"- {b['title']} (ID: {b.get('id', 'نامشخص')})\n  👤 ID: {b.get('uploaded_by', 'ناشناس')}\n\n" for b in books) + "ID کتاب رو وارد کن (یا عنوان کامل برای کتاب‌های بدون ID):"
+        response = "📚 لیست کتاب‌ها:\n\n" + "".join(f"- {b['title']} (ID: {b.get('id', 'نامشخص')})\n  👤 ID: {b.get('uploaded_by', 'ناشناس')}\n\n" for b in books) + "ID کتاب رو وارد کن (یا عنوان کامل برای کتاب‌های بدون ID):"
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
             for part in parts[:-1]:
@@ -283,7 +285,7 @@ async def delete_video_cmd(message: types.Message, state: FSMContext):
         if not videos:
             await message.reply("❌ هیچ ویدیویی نیست!", reply_markup=delete_menu)
             return
-        response = "🎬 **لیست ویدیوها:**\n\n" + "".join(f"- {v.get('caption', 'بدون کپشن')} (ID: {v.get('id', 'نامشخص')})\n  👤 ID: {v.get('uploaded_by', 'ناشناس')}\n\n" for v in videos) + "ID ویدیو رو وارد کن:"
+        response = "🎬 لیست ویدیوها:\n\n" + "".join(f"- {v.get('caption', 'بدون کپشن')} (ID: {v.get('id', 'نامشخص')})\n  👤 ID: {v.get('uploaded_by', 'ناشناس')}\n\n" for v in videos) + "ID ویدیو رو وارد کن:"
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
             for part in parts[:-1]:
