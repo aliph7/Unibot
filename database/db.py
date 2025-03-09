@@ -1,79 +1,74 @@
-from pymongo import MongoClient
-import os
 import logging
+import os
+from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
+from config.config import Config
+from database.db import setup_database
+from handlers import start, pamphlets, books, videos, admin  # اضافه کردن admin
+from middlewares import BanMiddleware  # اضافه کردن میدلور
 
+# تنظیم لاگینگ
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# اتصال به MongoDB
-client = MongoClient(os.getenv("MONGO_URI", "YOUR_MONGODB_CONNECTION_STRING"))
-db = client["university_bot"]
+# تنظیمات Webhook
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_URL = os.getenv("BASE_URL", "https://unibot-vfzt.onrender.com") + WEBHOOK_PATH  # از متغیر محیطی می‌خونه
+WEBAPP_HOST = "0.0.0.0"
+WEBAPP_PORT = int(os.getenv("PORT", 8080))
 
-# مجموعه‌ها (معادل جداول SQLite)
-pamphlets_collection = db["pamphlets"]
-books_collection = db["books"]
-videos_collection = db["videos"]  # اسم رو با handlers هماهنگ کردم
+async def on_startup(bot: Bot):
+    """تنظیم Webhook موقع شروع"""
+    logger.info("Setting up webhook...")
+    await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
 
-def setup_database():
-    """تست اتصال به دیتابیس MongoDB"""
+async def main():
     try:
-        client.server_info()  # چک کردن اتصال
-        logger.info("Connected to MongoDB successfully")
+        # تنظیمات اولیه
+        logger.info("Starting bot...")
+        config = Config()
+        storage = MemoryStorage()
+        bot = Bot(token=config.TOKEN)
+        dp = Dispatcher(storage=storage)
+        
+        # اضافه کردن میدلور بن
+        dp.message.middleware(BanMiddleware())
+        
+        # راه‌اندازی دیتابیس
+        logger.info("Setting up database...")
+        setup_database()
+        
+        # ثبت هندلرها
+        logger.info("Registering handlers...")
+        start.register_handlers(dp)
+        books.register_handlers(dp)
+        pamphlets.register_handlers(dp)
+        videos.register_handlers(dp)
+        admin.register_handlers(dp)  # اضافه کردن ادمین
+        
+        # تنظیم Webhook
+        dp.startup.register(on_startup)
+        
+        # تنظیم سرور aiohttp
+        app = web.Application()
+        webhook_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
+        webhook_handler.register(app, path=WEBHOOK_PATH)
+        setup_application(app, dp, bot=bot)
+        
+        # شروع سرور
+        logger.info(f"Starting webhook server on {WEBAPP_HOST}:{WEBAPP_PORT}...")
+        await web.run_app(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
+        
     except Exception as e:
-        logger.error(f"Failed to connect to MongoDB: {e}")
+        logger.error(f"Error occurred: {e}")
         raise e
+    finally:
+        logger.info("Bot stopped")
 
-# توابع برای مدیریت pamphlets
-def add_pamphlet(title, file_id, department, course, uploaded_by, upload_date):
-    """اضافه کردن یه جزوه جدید"""
-    pamphlet = {
-        "title": title,
-        "file_id": file_id,
-        "department": department,
-        "course": course,
-        "uploaded_by": uploaded_by,
-        "upload_date": upload_date
-    }
-    result = pamphlets_collection.insert_one(pamphlet)
-    return result.inserted_id
-
-def get_pamphlets(department=None, course=None):
-    """گرفتن لیست جزوات با فیلتر اختیاری"""
-    query = {}
-    if department:
-        query["department"] = department
-    if course:
-        query["course"] = course
-    return list(pamphlets_collection.find(query))
-
-# توابع برای مدیریت books
-def add_book(title, file_id, uploaded_by, upload_date):
-    """اضافه کردن یه کتاب جدید"""
-    book = {
-        "title": title,
-        "file_id": file_id,
-        "uploaded_by": uploaded_by,
-        "upload_date": upload_date
-    }
-    result = books_collection.insert_one(book)
-    return result.inserted_id
-
-def get_books():
-    """گرفتن لیست همه کتاب‌ها"""
-    return list(books_collection.find({}))
-
-# توابع برای مدیریت videos
-def add_video(file_id, file_unique_id, caption, uploaded_by, upload_date):
-    """اضافه کردن یه ویدیو جدید"""
-    video = {
-        "file_id": file_id,
-        "file_unique_id": file_unique_id,
-        "caption": caption,
-        "uploaded_by": uploaded_by,
-        "upload_date": upload_date
-    }
-    result = videos_collection.insert_one(video)
-    return result.inserted_id
-
-def get_videos():
-    """گرفتن لیست همه ویدیوها"""
-    return list(videos_collection.find({}))
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot stopped!")
