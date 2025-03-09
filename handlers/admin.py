@@ -226,7 +226,7 @@ async def delete_book_cmd(message: types.Message, state: FSMContext):
             await message.reply("❌ هیچ کتابی نیست!", reply_markup=delete_menu)
             logger.info("No books found in database")
             return
-        response = "📚 **لیست کتاب‌ها:**\n\n" + "".join(f"- {b['title']} (ID: {b.get('id', 'نامشخص')})\n  👤 {b.get('uploaded_by', 'ناشناس')}\n\n" for b in books) + "ID کتاب رو وارد کن:"
+        response = "📚 **لیست کتاب‌ها:**\n\n" + "".join(f"- {b['title']} (ID: {b.get('id', 'نامشخص')})\n  👤 {b.get('uploaded_by', 'ناشناس')}\n\n" for b in books) + "ID کتاب رو وارد کن (یا عنوان کامل برای کتاب‌های بدون ID):"
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
             for part in parts[:-1]:
@@ -247,14 +247,24 @@ async def process_delete_book(message: types.Message, state: FSMContext):
         await back_to_admin(message, state)
         return
     try:
-        book_id = int(message.text)
-        if delete_book(book_id):
-            await message.reply(f"✅ کتاب {book_id} حذف شد.", reply_markup=admin_menu)
-            await state.set_state(AdminStates.admin_panel)
-        else:
-            await message.reply("❌ کتاب پیدا نشد! دوباره تلاش کن:", reply_markup=delete_menu)
-    except ValueError:
-        await message.reply("❌ ID باید عدد باشه!", reply_markup=delete_menu)
+        # اگه ورودی عدد باشه
+        try:
+            book_id = int(message.text)
+            if delete_book(book_id):
+                await message.reply(f"✅ کتاب {book_id} حذف شد.", reply_markup=admin_menu)
+                await state.set_state(AdminStates.admin_panel)
+            else:
+                await message.reply("❌ کتاب پیدا نشد! دوباره تلاش کن:", reply_markup=delete_menu)
+        # اگه ورودی عدد نباشه (مثلاً "نامشخص" یا عنوان)
+        except ValueError:
+            book_title = message.text.strip()
+            if book_title == "نامشخص":
+                await message.reply("❌ لطفاً عنوان کامل کتاب رو وارد کن!", reply_markup=delete_menu)
+            elif delete_book(book_title):
+                await message.reply(f"✅ کتاب '{book_title}' حذف شد.", reply_markup=admin_menu)
+                await state.set_state(AdminStates.admin_panel)
+            else:
+                await message.reply("❌ کتاب پیدا نشد! دوباره تلاش کن:", reply_markup=delete_menu)
     except Exception as e:
         logger.error(f"Error deleting book: {e}")
         await message.reply("❌ خطا! دوباره تلاش کن:", reply_markup=delete_menu)
