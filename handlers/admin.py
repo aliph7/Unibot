@@ -8,7 +8,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# تعریف استیت‌ها
 class AdminStates(StatesGroup):
     admin_panel = State()
     delete_menu = State()
@@ -18,10 +17,8 @@ class AdminStates(StatesGroup):
     waiting_for_ban_id = State()
     waiting_for_unban_id = State()
 
-# ID تلگرام شما
 ADMIN_ID = 100851995
 
-# منوها
 admin_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📂 لیست فایل‌ها")],
@@ -117,13 +114,13 @@ async def ban_user_cmd(message: types.Message, state: FSMContext):
 async def ban_user_start(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
-    await message.reply("🚫 ID کاربر برای بن کردن رو وارد کن:", reply_markup=ban_menu)
+    await message.reply("🚫 ID عددی کاربر رو برای بن کردن وارد کن (مثلاً 7488819947):", reply_markup=ban_menu)
     await state.set_state(AdminStates.waiting_for_ban_id)
 
 async def unban_user_start(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
-    await message.reply("✅ ID کاربر برای آن‌بن کردن رو وارد کن:", reply_markup=ban_menu)
+    await message.reply("✅ ID عددی کاربر رو برای آن‌بن کردن وارد کن (مثلاً 7488819947):", reply_markup=ban_menu)
     await state.set_state(AdminStates.waiting_for_unban_id)
 
 async def process_ban_user(message: types.Message, state: FSMContext):
@@ -133,7 +130,11 @@ async def process_ban_user(message: types.Message, state: FSMContext):
         await back_to_admin(message, state)
         return
     try:
-        user_id = message.text
+        user_id = message.text.strip()
+        # چک کن که ورودی عدد باشه
+        if not user_id.isdigit():
+            await message.reply("❌ لطفاً فقط ID عددی وارد کن (مثلاً 7488819947)!", reply_markup=ban_menu)
+            return
         ban_user(user_id)
         await message.reply(f"✅ کاربر {user_id} بن شد.", reply_markup=admin_menu)
         await state.set_state(AdminStates.admin_panel)
@@ -148,7 +149,11 @@ async def process_unban_user(message: types.Message, state: FSMContext):
         await back_to_admin(message, state)
         return
     try:
-        user_id = message.text
+        user_id = message.text.strip()
+        # چک کن که ورودی عدد باشه
+        if not user_id.isdigit():
+            await message.reply("❌ لطفاً فقط ID عددی وارد کن (مثلاً 7488819947)!", reply_markup=ban_menu)
+            return
         unban_user(user_id)
         await message.reply(f"✅ کاربر {user_id} آن‌بن شد.", reply_markup=admin_menu)
         await state.set_state(AdminStates.admin_panel)
@@ -247,7 +252,6 @@ async def process_delete_book(message: types.Message, state: FSMContext):
         await back_to_admin(message, state)
         return
     try:
-        # اگه ورودی عدد باشه
         try:
             book_id = int(message.text)
             if delete_book(book_id):
@@ -255,7 +259,6 @@ async def process_delete_book(message: types.Message, state: FSMContext):
                 await state.set_state(AdminStates.admin_panel)
             else:
                 await message.reply("❌ کتاب پیدا نشد! دوباره تلاش کن:", reply_markup=delete_menu)
-        # اگه ورودی عدد نباشه (مثلاً "نامشخص" یا عنوان)
         except ValueError:
             book_title = message.text.strip()
             if book_title == "نامشخص":
