@@ -6,7 +6,8 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from aiohttp import web
 from config.config import Config
 from database.db import setup_database
-from handlers import start, pamphlets, books, videos
+from handlers import start, pamphlets, books, videos, admin  # اضافه کردن admin
+from middlewares import BanMiddleware  # اضافه کردن میدلور
 
 # تنظیم لاگینگ
 logging.basicConfig(level=logging.INFO)
@@ -14,16 +15,16 @@ logger = logging.getLogger(__name__)
 
 # تنظیمات Webhook
 WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = "https://unibot-vfzt.onrender.com" + WEBHOOK_PATH  # URL رباتت رو اینجا بذار
+WEBHOOK_URL = os.getenv("BASE_URL", "https://unibot-vfzt.onrender.com") + WEBHOOK_PATH  # از متغیر محیطی می‌خونه
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = int(os.getenv("PORT", 8080))
 
 async def on_startup(bot: Bot):
     """تنظیم Webhook موقع شروع"""
     logger.info("Setting up webhook...")
-    await bot.set_webhook(url=WEBHOOK_URL)
+    await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
 
-def main():
+async def main():
     try:
         # تنظیمات اولیه
         logger.info("Starting bot...")
@@ -31,6 +32,9 @@ def main():
         storage = MemoryStorage()
         bot = Bot(token=config.TOKEN)
         dp = Dispatcher(storage=storage)
+        
+        # اضافه کردن میدلور بن
+        dp.message.middleware(BanMiddleware())
         
         # راه‌اندازی دیتابیس
         logger.info("Setting up database...")
@@ -42,6 +46,7 @@ def main():
         books.register_handlers(dp)
         pamphlets.register_handlers(dp)
         videos.register_handlers(dp)
+        admin.register_handlers(dp)  # اضافه کردن ادمین
         
         # تنظیم Webhook
         dp.startup.register(on_startup)
@@ -54,7 +59,7 @@ def main():
         
         # شروع سرور
         logger.info(f"Starting webhook server on {WEBAPP_HOST}:{WEBAPP_PORT}...")
-        web.run_app(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
+        await web.run_app(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
         
     except Exception as e:
         logger.error(f"Error occurred: {e}")
@@ -64,6 +69,6 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped!")
