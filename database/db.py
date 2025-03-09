@@ -12,7 +12,7 @@ db = client["university_bot"]
 pamphlets_collection = db["pamphlets"]
 books_collection = db["books"]
 videos_collection = db["videos"]
-users_collection = db["users"]  # برای مدیریت کاربران
+users_collection = db["users"]
 
 def setup_database():
     """تست اتصال به دیتابیس MongoDB"""
@@ -38,12 +38,22 @@ def add_pamphlet(title, file_id, department, course, uploaded_by, upload_date):
     return pamphlet["id"]
 
 def get_pamphlets(department=None, course=None):
-    query = {}
-    if department:
-        query["department"] = department
-    if course:
-        query["course"] = course
-    return list(pamphlets_collection.find(query))
+    try:
+        query = {}
+        if department:
+            query["department"] = department
+        if course:
+            query["course"] = course
+        pamphlets = list(pamphlets_collection.find(query))
+        logger.info(f"Retrieved {len(pamphlets)} pamphlets from database")
+        # چک کردن داده‌ها
+        for p in pamphlets:
+            if "title" not in p or "id" not in p or "uploaded_by" not in p:
+                logger.warning(f"Invalid pamphlet data: {p}")
+        return pamphlets
+    except Exception as e:
+        logger.error(f"Error in get_pamphlets: {e}")
+        return []
 
 def delete_pamphlet(pamphlet_id):
     result = pamphlets_collection.delete_one({"id": pamphlet_id})
@@ -62,7 +72,17 @@ def add_book(title, file_id, uploaded_by, upload_date):
     return book["id"]
 
 def get_books():
-    return list(books_collection.find({}))
+    try:
+        books = list(books_collection.find({}))
+        logger.info(f"Retrieved {len(books)} books from database")
+        # چک کردن داده‌ها
+        for b in books:
+            if "title" not in b or "id" not in b or "uploaded_by" not in b:
+                logger.warning(f"Invalid book data: {b}")
+        return books
+    except Exception as e:
+        logger.error(f"Error in get_books: {e}")
+        return []
 
 def delete_book(book_id):
     result = books_collection.delete_one({"id": book_id})
@@ -82,7 +102,17 @@ def add_video(file_id, file_unique_id, caption, uploaded_by, upload_date):
     return video["id"]
 
 def get_videos():
-    return list(videos_collection.find({}))
+    try:
+        videos = list(videos_collection.find({}))
+        logger.info(f"Retrieved {len(videos)} videos from database")
+        # چک کردن داده‌ها
+        for v in videos:
+            if "id" not in v or "uploaded_by" not in v:
+                logger.warning(f"Invalid video data: {v}")
+        return videos
+    except Exception as e:
+        logger.error(f"Error in get_videos: {e}")
+        return []
 
 def delete_video(video_id):
     result = videos_collection.delete_one({"id": video_id})
