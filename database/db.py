@@ -4,20 +4,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# اتصال به MongoDB
 client = MongoClient(os.getenv("MONGO_URI", "YOUR_MONGODB_CONNECTION_STRING"))
 db = client["university_bot"]
 
-# مجموعه‌ها
 pamphlets_collection = db["pamphlets"]
 books_collection = db["books"]
 videos_collection = db["videos"]
 users_collection = db["users"]
 
 def setup_database():
-    """تست اتصال به دیتابیس MongoDB"""
     try:
-        client.server_info()  # چک کردن اتصال
+        client.server_info()
         logger.info("Connected to MongoDB successfully")
     except Exception as e:
         logger.error(f"Failed to connect to MongoDB: {e}")
@@ -31,11 +28,17 @@ def add_pamphlet(title, file_id, department, course, uploaded_by, upload_date):
         "file_id": file_id,
         "department": department,
         "course": course,
-        "uploaded_by": uploaded_by,
+        "uploaded_by": str(uploaded_by),  # مطمئن شو به‌صورت رشته ذخیره بشه
         "upload_date": upload_date
     }
     result = pamphlets_collection.insert_one(pamphlet)
-    logger.info(f"Added pamphlet with ID: {pamphlet['id']}")
+    # کاربر رو ثبت کن
+    users_collection.update_one(
+        {"user_id": str(uploaded_by)},
+        {"$set": {"banned": False}},
+        upsert=True
+    )
+    logger.info(f"Added pamphlet with ID: {pamphlet['id']} and registered user: {uploaded_by}")
     return pamphlet["id"]
 
 def get_pamphlets(department=None, course=None):
@@ -50,7 +53,7 @@ def get_pamphlets(department=None, course=None):
         for p in pamphlets:
             missing_fields = [field for field in ["title", "id", "uploaded_by"] if field not in p]
             if missing_fields:
-                logger.warning(f"Pamphlet missing fields {missing_fields}: {p}")
+                logger.warning(f"Invalid pamphlet data: {p}")
         return pamphlets
     except Exception as e:
         logger.error(f"Error in get_pamphlets: {e}")
@@ -71,11 +74,17 @@ def add_book(title, file_id, uploaded_by, upload_date):
         "id": books_collection.count_documents({}) + 1,
         "title": title,
         "file_id": file_id,
-        "uploaded_by": uploaded_by,
+        "uploaded_by": str(uploaded_by),  # مطمئن شو به‌صورت رشته ذخیره بشه
         "upload_date": upload_date
     }
     result = books_collection.insert_one(book)
-    logger.info(f"Added book with ID: {book['id']}")
+    # کاربر رو ثبت کن
+    users_collection.update_one(
+        {"user_id": str(uploaded_by)},
+        {"$set": {"banned": False}},
+        upsert=True
+    )
+    logger.info(f"Added book with ID: {book['id']} and registered user: {uploaded_by}")
     return book["id"]
 
 def get_books():
@@ -85,7 +94,7 @@ def get_books():
         for b in books:
             missing_fields = [field for field in ["title", "id", "uploaded_by"] if field not in b]
             if missing_fields:
-                logger.warning(f"Book missing fields {missing_fields}: {b}")
+                logger.warning(f"Invalid book data: {b}")
         return books
     except Exception as e:
         logger.error(f"Error in get_books: {e}")
@@ -93,12 +102,10 @@ def get_books():
 
 def delete_book(book_id_or_title):
     try:
-        # اگه عدد باشه، با id حذف می‌کنه
         if isinstance(book_id_or_title, int):
             result = books_collection.delete_one({"id": book_id_or_title})
             logger.info(f"Deleted book with ID: {book_id_or_title}, count: {result.deleted_count}")
             return result.deleted_count > 0
-        # اگه "نامشخص" یا رشته باشه، با title حذف می‌کنه
         else:
             result = books_collection.delete_one({"title": book_id_or_title})
             logger.info(f"Deleted book with title: {book_id_or_title}, count: {result.deleted_count}")
@@ -114,11 +121,17 @@ def add_video(file_id, file_unique_id, caption, uploaded_by, upload_date):
         "file_id": file_id,
         "file_unique_id": file_unique_id,
         "caption": caption,
-        "uploaded_by": uploaded_by,
+        "uploaded_by": str(uploaded_by),  # مطمئن شو به‌صورت رشته ذخیره بشه
         "upload_date": upload_date
     }
     result = videos_collection.insert_one(video)
-    logger.info(f"Added video with ID: {video['id']}")
+    # کاربر رو ثبت کن
+    users_collection.update_one(
+        {"user_id": str(uploaded_by)},
+        {"$set": {"banned": False}},
+        upsert=True
+    )
+    logger.info(f"Added video with ID: {video['id']} and registered user: {uploaded_by}")
     return video["id"]
 
 def get_videos():
@@ -128,7 +141,7 @@ def get_videos():
         for v in videos:
             missing_fields = [field for field in ["id", "uploaded_by"] if field not in v]
             if missing_fields:
-                logger.warning(f"Video missing fields {missing_fields}: {v}")
+                logger.warning(f"Invalid video data: {v}")
         return videos
     except Exception as e:
         logger.error(f"Error in get_videos: {e}")
@@ -177,9 +190,16 @@ def get_user_count():
 
 def get_all_users():
     try:
-        users = users_collection.find()
-        result = [(user["user_id"], user.get("banned", False)) for user in users]
-        logger.info(f"Retrieved {len(result)} users")
+        unique_users = set()
+        for collection in [pamphlets_collection, books_collection, videos_collection]:
+            users = collection.distinct("uploaded_by")
+            unique_users.update(users)
+        result = []
+        for user_id in unique_users:
+            user = users_collection.find_one({"user_id": str(user_id)})
+            is_banned = user.get("banned", False) if user else False
+            result.append((user_id, is_banned))
+        logger.info(f"Retrieved {len(result)} uploaders")
         return result
     except Exception as e:
         logger.error(f"Error in get_all_users: {e}")
