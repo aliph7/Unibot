@@ -14,13 +14,12 @@ users_collection = db["users"]
 
 def setup_database():
     try:
-        client.server_info()  # تست اتصال
+        client.server_info()
         logger.info("Connected to MongoDB successfully")
     except Exception as e:
         logger.error(f"Failed to connect to MongoDB: {e}")
         raise e
 
-# توابع برای مدیریت pamphlets
 def add_pamphlet(title, file_id, department, course, uploaded_by, upload_date):
     pamphlet = {
         "id": pamphlets_collection.count_documents({}) + 1,
@@ -28,7 +27,7 @@ def add_pamphlet(title, file_id, department, course, uploaded_by, upload_date):
         "file_id": file_id,
         "department": department,
         "course": course,
-        "uploaded_by": str(uploaded_by),
+        "uploaded_by": str(uploaded_by),  # همیشه عدد به‌صورت رشته
         "upload_date": upload_date
     }
     result = pamphlets_collection.insert_one(pamphlet)
@@ -49,10 +48,6 @@ def get_pamphlets(department=None, course=None):
             query["course"] = course
         pamphlets = list(pamphlets_collection.find(query))
         logger.info(f"Retrieved {len(pamphlets)} pamphlets from database")
-        for p in pamphlets:
-            missing_fields = [field for field in ["title", "id", "uploaded_by"] if field not in p]
-            if missing_fields:
-                logger.warning(f"Invalid pamphlet data: {p}")
         return pamphlets
     except Exception as e:
         logger.error(f"Error in get_pamphlets: {e}")
@@ -67,13 +62,12 @@ def delete_pamphlet(pamphlet_id):
         logger.error(f"Error in delete_pamphlet: {e}")
         return False
 
-# توابع برای مدیریت books
 def add_book(title, file_id, uploaded_by, upload_date):
     book = {
         "id": books_collection.count_documents({}) + 1,
         "title": title,
         "file_id": file_id,
-        "uploaded_by": str(uploaded_by),
+        "uploaded_by": str(uploaded_by),  # همیشه عدد به‌صورت رشته
         "upload_date": upload_date
     }
     result = books_collection.insert_one(book)
@@ -89,10 +83,6 @@ def get_books():
     try:
         books = list(books_collection.find({}))
         logger.info(f"Retrieved {len(books)} books from database")
-        for b in books:
-            missing_fields = [field for field in ["title", "id", "uploaded_by"] if field not in b]
-            if missing_fields:
-                logger.warning(f"Invalid book data: {b}")
         return books
     except Exception as e:
         logger.error(f"Error in get_books: {e}")
@@ -112,14 +102,13 @@ def delete_book(book_id_or_title):
         logger.error(f"Error in delete_book: {e}")
         return False
 
-# توابع برای مدیریت videos
 def add_video(file_id, file_unique_id, caption, uploaded_by, upload_date):
     video = {
         "id": videos_collection.count_documents({}) + 1,
         "file_id": file_id,
         "file_unique_id": file_unique_id,
         "caption": caption,
-        "uploaded_by": str(uploaded_by),
+        "uploaded_by": str(uploaded_by),  # همیشه عدد به‌صورت رشته
         "upload_date": upload_date
     }
     result = videos_collection.insert_one(video)
@@ -135,10 +124,6 @@ def get_videos():
     try:
         videos = list(videos_collection.find({}))
         logger.info(f"Retrieved {len(videos)} videos from database")
-        for v in videos:
-            missing_fields = [field for field in ["id", "uploaded_by"] if field not in v]
-            if missing_fields:
-                logger.warning(f"Invalid video data: {v}")
         return videos
     except Exception as e:
         logger.error(f"Error in get_videos: {e}")
@@ -153,7 +138,6 @@ def delete_video(video_id):
         logger.error(f"Error in delete_video: {e}")
         return False
 
-# توابع مدیریت کاربران
 def ban_user(user_id):
     try:
         result = users_collection.update_one(
@@ -162,7 +146,6 @@ def ban_user(user_id):
             upsert=True
         )
         logger.info(f"Banned user: {user_id}, matched: {result.matched_count}, modified: {result.modified_count}")
-        # چک کن داکیومنت واقعاً آپدیت شده
         user = users_collection.find_one({"user_id": str(user_id)})
         if user and user.get("banned", False):
             logger.info(f"Confirmed ban for user: {user_id}")
@@ -187,7 +170,7 @@ def get_user_count():
         for collection in [pamphlets_collection, books_collection, videos_collection]:
             users = collection.distinct("uploaded_by")
             unique_users.update(users)
-        logger.info(f"Retrieved {len(unique_users)} unique users: {unique_users}")
+        logger.info(f"Retrieved {len(unique_users)} unique users: {list(unique_users)}")
         return len(unique_users)
     except Exception as e:
         logger.error(f"Error in get_user_count: {e}")
@@ -198,10 +181,13 @@ def get_all_users():
         unique_users = set()
         for collection in [pamphlets_collection, books_collection, videos_collection]:
             users = collection.distinct("uploaded_by")
-            unique_users.update(users)
+            # فقط کاربرانی که عدد هستن رو قبول کن
+            for user in users:
+                if user.isdigit():
+                    unique_users.add(user)
         result = []
         for user_id in unique_users:
-            user = users_collection.find_one({"user_id": str(user_id)})
+            user = users_collection.find_one({"user_id": user_id})
             is_banned = user.get("banned", False) if user else False
             result.append((user_id, is_banned))
         logger.info(f"Retrieved {len(result)} uploaders: {result}")
