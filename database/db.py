@@ -27,7 +27,7 @@ def add_pamphlet(title, file_id, department, course, uploaded_by, upload_date):
         "file_id": file_id,
         "department": department,
         "course": course,
-        "uploaded_by": str(uploaded_by),  # همیشه عدد به‌صورت رشته
+        "uploaded_by": str(uploaded_by),
         "upload_date": upload_date
     }
     result = pamphlets_collection.insert_one(pamphlet)
@@ -67,7 +67,7 @@ def add_book(title, file_id, uploaded_by, upload_date):
         "id": books_collection.count_documents({}) + 1,
         "title": title,
         "file_id": file_id,
-        "uploaded_by": str(uploaded_by),  # همیشه عدد به‌صورت رشته
+        "uploaded_by": str(uploaded_by),
         "upload_date": upload_date
     }
     result = books_collection.insert_one(book)
@@ -108,7 +108,7 @@ def add_video(file_id, file_unique_id, caption, uploaded_by, upload_date):
         "file_id": file_id,
         "file_unique_id": file_unique_id,
         "caption": caption,
-        "uploaded_by": str(uploaded_by),  # همیشه عدد به‌صورت رشته
+        "uploaded_by": str(uploaded_by),
         "upload_date": upload_date
     }
     result = videos_collection.insert_one(video)
@@ -181,10 +181,9 @@ def get_all_users():
         unique_users = set()
         for collection in [pamphlets_collection, books_collection, videos_collection]:
             users = collection.distinct("uploaded_by")
-            # فقط کاربرانی که عدد هستن رو قبول کن
             for user in users:
-                if user.isdigit():
-                    unique_users.add(user)
+                if user:  # مطمئن شو خالی نیست
+                    unique_users.add(str(user))  # همه رو به رشته تبدیل کن
         result = []
         for user_id in unique_users:
             user = users_collection.find_one({"user_id": user_id})
