@@ -1,5 +1,6 @@
 import logging
 import os
+import asyncio  # اضافه شد
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
@@ -15,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 # تنظیمات Webhook
 WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = os.getenv("BASE_URL", "https://unibot-vfzt.onrender.com") + WEBHOOK_PATH  # از متغیر محیطی می‌خونه
+WEBHOOK_URL = os.getenv("BASE_URL", "https://unibot-vfzt.onrender.com") + WEBHOOK_PATH  # از متغیر محیطی
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = int(os.getenv("PORT", 8080))
 
-async def on_startup(bot: Bot):
+async def on_startup  def on_startup(bot: Bot):
     """تنظیم Webhook موقع شروع"""
     logger.info("Setting up webhook...")
     await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
