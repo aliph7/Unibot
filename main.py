@@ -1,13 +1,16 @@
 import logging
 import os
-import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 from config.config import Config
 from database.db import setup_database
-from handlers import start, pamphlets, books, videos, admin
+from handlers.start import register_handlers as register_start_handlers
+from handlers.pamphlets import register_handlers as register_pamphlets_handlers
+from handlers.books import register_handlers as register_books_handlers
+from handlers.videos import register_handlers as register_videos_handlers
+from handlers.admin import register_handlers as register_admin_handlers
 from middlewares import BanMiddleware
 
 # تنظیم لاگینگ
@@ -21,13 +24,11 @@ WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = int(os.getenv("PORT", 8080))
 
 async def on_startup(bot: Bot):
-    """تنظیم Webhook موقع شروع"""
     logger.info("Setting up webhook...")
-    await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
+    await bot.set_webhook(url=WEBHOOK_URL)
 
-async def main():
+def main():
     try:
-        # تنظیمات اولیه
         logger.info("Starting bot...")
         config = Config()
         storage = MemoryStorage()
@@ -37,30 +38,25 @@ async def main():
         # اضافه کردن میدلور بن
         dp.message.middleware(BanMiddleware())
         
-        # راه‌اندازی دیتابیس
         logger.info("Setting up database...")
         setup_database()
         
-        # ثبت هندلرها
         logger.info("Registering handlers...")
-        start.register_handlers(dp)
-        books.register_handlers(dp)
-        pamphlets.register_handlers(dp)
-        videos.register_handlers(dp)
-        admin.register_handlers(dp)
+        register_start_handlers(dp)
+        register_books_handlers(dp)
+        register_pamphlets_handlers(dp)
+        register_videos_handlers(dp)
+        register_admin_handlers(dp)  # اضافه کردن ادمین
         
-        # تنظیم Webhook
         dp.startup.register(on_startup)
         
-        # تنظیم سرور aiohttp
         app = web.Application()
         webhook_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
         webhook_handler.register(app, path=WEBHOOK_PATH)
         setup_application(app, dp, bot=bot)
         
-        # شروع سرور
         logger.info(f"Starting webhook server on {WEBAPP_HOST}:{WEBAPP_PORT}...")
-        await web.run_app(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
+        web.run_app(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
         
     except Exception as e:
         logger.error(f"Error occurred: {e}")
@@ -70,6 +66,6 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped!")
