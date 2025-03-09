@@ -101,11 +101,11 @@ async def ban_user_cmd(message: types.Message, state: FSMContext):
     try:
         users = get_all_users()
         if not users:
-            await message.reply("❌ هیچ کاربری یافت نشد! لطفاً مطمئن شو کاربران توی دیتابیس ثبت شدن.")
+            await message.reply("❌ هیچ کاربری یافت نشد! لطفاً مطمئن شو کاربران توی دیتابیس ثبت شدن.", reply_markup=admin_menu)
             return
         response = "👥 **لیست کاربران:**\n\n"
         for user_id, is_banned in users:
-            if user_id.isdigit():  # فقط user_id عددی رو نشون بده
+            if user_id.isdigit():
                 response += f"👤 `{user_id}` - {('🚫 بن شده' if is_banned else '✅ فعال')}\n"
             else:
                 response += f"👤 `{user_id}` - {('🚫 بن شده' if is_banned else '✅ فعال')} (⚠️ این usernameه، لطفاً توی دیتابیس به user_id عددی تغییر بده)\n"
@@ -114,7 +114,7 @@ async def ban_user_cmd(message: types.Message, state: FSMContext):
         await state.set_state(AdminStates.admin_panel)
     except Exception as e:
         logger.error(f"Error in ban_user_cmd: {e}")
-        await message.reply("❌ خطا در گرفتن لیست کاربران! دوباره تلاش کن.", reply_markup=admin_menu)
+        await message.reply(f"❌ خطا در گرفتن لیست کاربران: {str(e)} دوباره تلاش کن.", reply_markup=admin_menu)
 
 async def ban_user_start(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
