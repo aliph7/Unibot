@@ -68,9 +68,9 @@ async def list_files(message: types.Message, state: FSMContext):
         videos = get_videos()
         
         response = "📂 **لیست فایل‌ها:**\n\n"
-        response += "📝 **جزوات:**\n" + ("".join(f"- {p['title']} (ID: {p['id']})\n  👤 {p['uploaded_by']}\n\n" for p in pamphlets) or "❌ هیچ جزوه‌ای نیست\n\n")
-        response += "📚 **کتاب‌ها:**\n" + ("".join(f"- {b['title']} (ID: {b['id']})\n  👤 {b['uploaded_by']}\n\n" for b in books) or "❌ هیچ کتابی نیست\n\n")
-        response += "🎬 **ویدیوها:**\n" + ("".join(f"- {v['caption'] or 'بدون کپشن'} (ID: {v['id']})\n  👤 {v['uploaded_by']}\n\n" for v in videos) or "❌ هیچ ویدیویی نیست\n\n")
+        response += "📝 **جزوات:**\n" + ("".join(f"- {p['title']} (ID: {p.get('id', 'نامشخص')})\n  👤 {p.get('uploaded_by', 'ناشناس')}\n\n" for p in pamphlets) or "❌ هیچ جزوه‌ای نیست\n\n")
+        response += "📚 **کتاب‌ها:**\n" + ("".join(f"- {b['title']} (ID: {b.get('id', 'نامشخص')})\n  👤 {b.get('uploaded_by', 'ناشناس')}\n\n" for b in books) or "❌ هیچ کتابی نیست\n\n")
+        response += "🎬 **ویدیوها:**\n" + ("".join(f"- {v.get('caption', 'بدون کپشن')} (ID: {v.get('id', 'نامشخص')})\n  👤 {v.get('uploaded_by', 'ناشناس')}\n\n" for v in videos) or "❌ هیچ ویدیویی نیست\n\n")
         
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
@@ -179,7 +179,7 @@ async def delete_pamphlet_cmd(message: types.Message, state: FSMContext):
         if not pamphlets:
             await message.reply("❌ هیچ جزوه‌ای نیست!", reply_markup=delete_menu)
             return
-        response = "📝 **لیست جزوات:**\n\n" + "".join(f"- {p['title']} (ID: {p['id']})\n  👤 {p['uploaded_by']}\n\n" for p in pamphlets) + "ID جزوه رو وارد کن:"
+        response = "📝 **لیست جزوات:**\n\n" + "".join(f"- {p['title']} (ID: {p.get('id', 'نامشخص')})\n  👤 {p.get('uploaded_by', 'ناشناس')}\n\n" for p in pamphlets) + "ID جزوه رو وارد کن:"
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
             for part in parts[:-1]:
@@ -226,7 +226,7 @@ async def delete_book_cmd(message: types.Message, state: FSMContext):
             await message.reply("❌ هیچ کتابی نیست!", reply_markup=delete_menu)
             logger.info("No books found in database")
             return
-        response = "📚 **لیست کتاب‌ها:**\n\n" + "".join(f"- {b['title']} (ID: {b['id']})\n  👤 {b['uploaded_by']}\n\n" for b in books) + "ID کتاب رو وارد کن:"
+        response = "📚 **لیست کتاب‌ها:**\n\n" + "".join(f"- {b['title']} (ID: {b.get('id', 'نامشخص')})\n  👤 {b.get('uploaded_by', 'ناشناس')}\n\n" for b in books) + "ID کتاب رو وارد کن:"
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
             for part in parts[:-1]:
@@ -267,7 +267,7 @@ async def delete_video_cmd(message: types.Message, state: FSMContext):
         if not videos:
             await message.reply("❌ هیچ ویدیویی نیست!", reply_markup=delete_menu)
             return
-        response = "🎬 **لیست ویدیوها:**\n\n" + "".join(f"- {v['caption'] or 'بدون کپشن'} (ID: {v['id']})\n  👤 {v['uploaded_by']}\n\n" for v in videos) + "ID ویدیو رو وارد کن:"
+        response = "🎬 **لیست ویدیوها:**\n\n" + "".join(f"- {v.get('caption', 'بدون کپشن')} (ID: {v.get('id', 'نامشخص')})\n  👤 {v.get('uploaded_by', 'ناشناس')}\n\n" for v in videos) + "ID ویدیو رو وارد کن:"
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
             for part in parts[:-1]:
