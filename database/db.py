@@ -14,7 +14,7 @@ users_collection = db["users"]
 
 def setup_database():
     try:
-        client.server_info()
+        client.server_info()  # تست اتصال
         logger.info("Connected to MongoDB successfully")
     except Exception as e:
         logger.error(f"Failed to connect to MongoDB: {e}")
@@ -28,11 +28,10 @@ def add_pamphlet(title, file_id, department, course, uploaded_by, upload_date):
         "file_id": file_id,
         "department": department,
         "course": course,
-        "uploaded_by": str(uploaded_by),  # مطمئن شو به‌صورت رشته ذخیره بشه
+        "uploaded_by": str(uploaded_by),
         "upload_date": upload_date
     }
     result = pamphlets_collection.insert_one(pamphlet)
-    # کاربر رو ثبت کن
     users_collection.update_one(
         {"user_id": str(uploaded_by)},
         {"$set": {"banned": False}},
@@ -74,11 +73,10 @@ def add_book(title, file_id, uploaded_by, upload_date):
         "id": books_collection.count_documents({}) + 1,
         "title": title,
         "file_id": file_id,
-        "uploaded_by": str(uploaded_by),  # مطمئن شو به‌صورت رشته ذخیره بشه
+        "uploaded_by": str(uploaded_by),
         "upload_date": upload_date
     }
     result = books_collection.insert_one(book)
-    # کاربر رو ثبت کن
     users_collection.update_one(
         {"user_id": str(uploaded_by)},
         {"$set": {"banned": False}},
@@ -121,11 +119,10 @@ def add_video(file_id, file_unique_id, caption, uploaded_by, upload_date):
         "file_id": file_id,
         "file_unique_id": file_unique_id,
         "caption": caption,
-        "uploaded_by": str(uploaded_by),  # مطمئن شو به‌صورت رشته ذخیره بشه
+        "uploaded_by": str(uploaded_by),
         "upload_date": upload_date
     }
     result = videos_collection.insert_one(video)
-    # کاربر رو ثبت کن
     users_collection.update_one(
         {"user_id": str(uploaded_by)},
         {"$set": {"banned": False}},
@@ -159,19 +156,27 @@ def delete_video(video_id):
 # توابع مدیریت کاربران
 def ban_user(user_id):
     try:
-        users_collection.update_one(
+        result = users_collection.update_one(
             {"user_id": str(user_id)},
             {"$set": {"banned": True}},
             upsert=True
         )
-        logger.info(f"Banned user: {user_id}")
+        logger.info(f"Banned user: {user_id}, matched: {result.matched_count}, modified: {result.modified_count}")
+        # چک کن داکیومنت واقعاً آپدیت شده
+        user = users_collection.find_one({"user_id": str(user_id)})
+        if user and user.get("banned", False):
+            logger.info(f"Confirmed ban for user: {user_id}")
+        else:
+            logger.error(f"Failed to confirm ban for user: {user_id}, doc: {user}")
     except Exception as e:
         logger.error(f"Error in ban_user: {e}")
 
 def is_user_banned(user_id):
     try:
         user = users_collection.find_one({"user_id": str(user_id)})
-        return user and user.get("banned", False)
+        banned = user and user.get("banned", False)
+        logger.info(f"Checked ban status for {user_id}: {banned}, doc: {user}")
+        return banned
     except Exception as e:
         logger.error(f"Error in is_user_banned: {e}")
         return False
@@ -182,7 +187,7 @@ def get_user_count():
         for collection in [pamphlets_collection, books_collection, videos_collection]:
             users = collection.distinct("uploaded_by")
             unique_users.update(users)
-        logger.info(f"Retrieved {len(unique_users)} unique users")
+        logger.info(f"Retrieved {len(unique_users)} unique users: {unique_users}")
         return len(unique_users)
     except Exception as e:
         logger.error(f"Error in get_user_count: {e}")
@@ -199,7 +204,7 @@ def get_all_users():
             user = users_collection.find_one({"user_id": str(user_id)})
             is_banned = user.get("banned", False) if user else False
             result.append((user_id, is_banned))
-        logger.info(f"Retrieved {len(result)} uploaders")
+        logger.info(f"Retrieved {len(result)} uploaders: {result}")
         return result
     except Exception as e:
         logger.error(f"Error in get_all_users: {e}")
@@ -207,12 +212,12 @@ def get_all_users():
 
 def unban_user(user_id):
     try:
-        users_collection.update_one(
+        result = users_collection.update_one(
             {"user_id": str(user_id)},
             {"$set": {"banned": False}},
             upsert=True
         )
-        logger.info(f"Unbanned user: {user_id}")
+        logger.info(f"Unbanned user: {user_id}, matched: {result.matched_count}, modified: {result.modified_count}")
     except Exception as e:
         logger.error(f"Error in unban_user: {e}")
 
