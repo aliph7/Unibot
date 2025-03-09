@@ -1,26 +1,16 @@
-from typing import Any, Awaitable, Callable, Dict
 from aiogram import BaseMiddleware
 from aiogram.types import Message
 from database.db import is_user_banned
-from config.config import Config
+import logging
+
+logger = logging.getLogger(__name__)
 
 class BanMiddleware(BaseMiddleware):
-    async def __call__(
-        self,
-        handler: Callable[[Message, Dict[str, Any]], Awaitable[Any]],
-        event: Message,
-        data: Dict[str, Any]
-    ) -> Any:
-        # چک کردن وضعیت بن کاربر
+    async def __call__(self, handler, event: Message, data):
         user_id = event.from_user.id
-        
-        # اگر کاربر بن شده باشد
         if is_user_banned(user_id):
-            await event.answer(
-                "⛔️ شما از استفاده از ربات محروم شده‌اید!\n\n"
-                f"📩 برای رفع محرومیت با ادمین در ارتباط باشید: @{Config.ADMIN_USERNAME}"
-            )
-            return
-        
-        # اگر کاربر بن نشده باشد، اجازه ادامه می‌دهیم
+            logger.info(f"Blocked message from banned user: {user_id}")
+            await event.answer("❌ شما بن شدید و نمی‌تونید با ربات تعامل کنید!")
+            return  # پیام به هندلر نمی‌ره
+        # اگه بن نباشه، پیام به هندلر می‌ره
         return await handler(event, data)
