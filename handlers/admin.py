@@ -1,6 +1,6 @@
 from aiogram import types, Dispatcher
 from aiogram.fsm.context import FSMContext
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command, StateFilter
 from database.db import get_pamphlets, get_books, get_videos, delete_pamphlet, delete_book, delete_video, ban_user, is_user_banned, get_user_count, get_all_users, unban_user
 from aiogram.fsm.state import State, StatesGroup
@@ -12,19 +12,16 @@ logger = logging.getLogger(__name__)
 class AdminStates(StatesGroup):
     admin_panel = State()
     delete_menu = State()
-    delete_pamphlet_menu = State()
-    delete_book_menu = State()
-    delete_video_menu = State()
     waiting_for_delete_pamphlet = State()
     waiting_for_delete_book = State()
     waiting_for_delete_video = State()
     waiting_for_ban_id = State()
-    waiting_for_unban_id = State()  # اضافه شد
+    waiting_for_unban_id = State()
 
 # ID تلگرام شما
 ADMIN_ID = 100851995
 
-# منوی مدیریت
+# منوها
 admin_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📂 لیست فایل‌ها")],
@@ -36,7 +33,6 @@ admin_menu = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# منوی حذف محتوا
 delete_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📝 حذف جزوه")],
@@ -47,7 +43,6 @@ delete_menu = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# منوی بن کردن کاربر
 ban_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🚫 بن کردن"), KeyboardButton(text="✅ آن‌بن کردن")],
@@ -57,409 +52,257 @@ ban_menu = ReplyKeyboardMarkup(
 )
 
 async def cmd_boss(message: types.Message, state: FSMContext):
-    """دستور ورود به بخش مدیریت"""
     if message.from_user.id != ADMIN_ID:
         await message.reply("❌ شما دسترسی به این بخش را ندارید!")
         return
-    
     await message.reply("به بخش مدیریت خوش اومدی! لطفاً انتخاب کن:", reply_markup=admin_menu)
     await state.set_state(AdminStates.admin_panel)
+    logger.info(f"Admin panel opened for user: {message.from_user.id}")
 
 async def list_files(message: types.Message, state: FSMContext):
-    """نمایش لیست فایل‌ها"""
     if message.from_user.id != ADMIN_ID:
         return
-    
-    pamphlets = get_pamphlets()
-    books = get_books()
-    videos = get_videos()
-    
-    response = "📂 **لیست فایل‌ها:**\n\n"
-    
-    response += "📝 **جزوات:**\n"
-    if pamphlets:
-        for p in pamphlets:
-            response += f"- فایل شماره {p['id']}\n"
-            if 'caption' in p and p['caption']:
-                response += f"  📄 توضیحات: {p['caption']}\n"
-            response += f"  👤 آپلودکننده: `{p['uploaded_by']}`\n\n"
-    else:
-        response += "❌ هیچ جزوه‌ای موجود نیست\n\n"
-    
-    response += "📚 **کتاب‌ها:**\n"
-    if books:
-        for b in books:
-            response += f"- فایل شماره {b['id']}\n"
-            if 'caption' in b and b['caption']:
-                response += f"  📄 توضیحات: {b['caption']}\n"
-            response += f"  👤 آپلودکننده: `{b['uploaded_by']}`\n\n"
-    else:
-        response += "❌ هیچ کتابی موجود نیست\n\n"
-    
-    response += "🎬 **ویدیوها:**\n"
-    if videos:
-        for v in videos:
-            response += f"- فایل شماره {v['id']}\n"
-            if 'caption' in v and v['caption']:
-                response += f"  📄 توضیحات: {v['caption']}\n"
-            response += f"  👤 آپلودکننده: `{v['uploaded_by']}`\n\n"
-    else:
-        response += "❌ هیچ ویدیویی موجود نیست\n\n"
-    
-    if len(response) > 4096:
-        parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
-        for part in parts:
-            await message.reply(part, parse_mode="Markdown")
-    else:
-        await message.reply(response, parse_mode="Markdown")
+    try:
+        pamphlets = get_pamphlets()
+        books = get_books()
+        videos = get_videos()
+        
+        response = "📂 **لیست فایل‌ها:**\n\n"
+        response += "📝 **جزوات:**\n" + ("".join(f"- {p['title']} (ID: {p['id']})\n  👤 {p['uploaded_by']}\n\n" for p in pamphlets) or "❌ هیچ جزوه‌ای نیست\n\n")
+        response += "📚 **کتاب‌ها:**\n" + ("".join(f"- {b['title']} (ID: {b['id']})\n  👤 {b['uploaded_by']}\n\n" for b in books) or "❌ هیچ کتابی نیست\n\n")
+        response += "🎬 **ویدیوها:**\n" + ("".join(f"- {v['caption'] or 'بدون کپشن'} (ID: {v['id']})\n  👤 {v['uploaded_by']}\n\n" for v in videos) or "❌ هیچ ویدیویی نیست\n\n")
+        
+        if len(response) > 4096:
+            parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
+            for part in parts:
+                await message.reply(part, parse_mode="Markdown")
+        else:
+            await message.reply(response, parse_mode="Markdown")
+        logger.info(f"File list sent to admin: {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"Error in list_files: {e}")
+        await message.reply("❌ خطا در گرفتن لیست فایل‌ها! دوباره تلاش کن.", reply_markup=admin_menu)
 
 async def show_stats(message: types.Message, state: FSMContext):
-    """نمایش آمار ربات"""
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id != ADMIN_ID or await state.get_state() != AdminStates.admin_panel:
         return
-    
-    current_state = await state.get_state()
-    if current_state != AdminStates.admin_panel:
-        return
-        
-    pamphlets = get_pamphlets()
-    books = get_books()
-    videos = get_videos()
-    
-    stats = "📊 **آمار ربات:**\n\n"
-    stats += f"تعداد جزوات: {len(pamphlets)}\n"
-    stats += f"تعداد کتاب‌ها: {len(books)}\n"
-    stats += f"تعداد ویدیوها: {len(videos)}\n"
-    stats += f"تعداد کاربران: {get_user_count()}\n"
-    
-    await message.reply(stats)
+    try:
+        stats = "📊 **آمار ربات:**\n\n"
+        stats += f"تعداد جزوات: {len(get_pamphlets())}\n"
+        stats += f"تعداد کتاب‌ها: {len(get_books())}\n"
+        stats += f"تعداد ویدیوها: {len(get_videos())}\n"
+        stats += f"تعداد کاربران: {get_user_count()}\n"
+        await message.reply(stats)
+        logger.info(f"Stats sent to admin: {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"Error in show_stats: {e}")
+        await message.reply("❌ خطا در گرفتن آمار! دوباره تلاش کن.", reply_markup=admin_menu)
 
 async def ban_user_cmd(message: types.Message, state: FSMContext):
-    """بن کردن کاربر"""
     if message.from_user.id != ADMIN_ID:
         return
-    
-    users = get_all_users()
-    if not users:
-        await message.reply("❌ هیچ کاربری یافت نشد!")
-        return
-
-    response = "👥 **لیست کاربران:**\n\n"
-    for user_id, is_banned in users:
-        status = "🚫 بن شده" if is_banned else "✅ فعال"
-        response += f"👤 کاربر: `{user_id}`\n"
-        response += f"وضعیت: {status}\n\n"
-    
-    response += "برای بن یا آن‌بن کردن کاربر، از دکمه‌های زیر استفاده کنید:"
-    
-    await message.reply(response, parse_mode="Markdown", reply_markup=ban_menu)
-    await state.set_state(AdminStates.admin_panel)
+    try:
+        users = get_all_users()
+        if not users:
+            await message.reply("❌ هیچ کاربری یافت نشد!")
+            return
+        response = "👥 **لیست کاربران:**\n\n" + "".join(f"👤 `{user_id}` - {('🚫 بن شده' if is_banned else '✅ فعال')}\n\n" for user_id, is_banned in users)
+        response += "برای بن یا آن‌بن کردن، از دکمه‌ها استفاده کنید:"
+        await message.reply(response, parse_mode="Markdown", reply_markup=ban_menu)
+        await state.set_state(AdminStates.admin_panel)
+    except Exception as e:
+        logger.error(f"Error in ban_user_cmd: {e}")
+        await message.reply("❌ خطا در گرفتن لیست کاربران! دوباره تلاش کن.", reply_markup=admin_menu)
 
 async def ban_user_start(message: types.Message, state: FSMContext):
-    """شروع فرایند بن کردن"""
     if message.from_user.id != ADMIN_ID:
         return
-    
-    await message.reply(
-        "🚫 لطفاً ID کاربر مورد نظر برای بن کردن را وارد کنید:\n\n"
-        "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-        reply_markup=ban_menu
-    )
+    await message.reply("🚫 ID کاربر برای بن کردن رو وارد کن:", reply_markup=ban_menu)
     await state.set_state(AdminStates.waiting_for_ban_id)
 
 async def unban_user_start(message: types.Message, state: FSMContext):
-    """شروع فرایند آن‌بن کردن (اضافه شده)"""
     if message.from_user.id != ADMIN_ID:
         return
-    
-    await message.reply(
-        "✅ لطفاً ID کاربر مورد نظر برای آن‌بن کردن را وارد کنید:\n\n"
-        "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-        reply_markup=ban_menu
-    )
+    await message.reply("✅ ID کاربر برای آن‌بن کردن رو وارد کن:", reply_markup=ban_menu)
     await state.set_state(AdminStates.waiting_for_unban_id)
 
 async def process_ban_user(message: types.Message, state: FSMContext):
-    """پردازش بن کردن"""
     if message.from_user.id != ADMIN_ID:
         return
-    
     if message.text == "🔙 بازگشت به منوی مدیریت":
         await back_to_admin(message, state)
         return
-    
     try:
         user_id = message.text
         ban_user(user_id)
-        await message.reply(f"✅ کاربر با ID {user_id} بن شد.")
-        await message.reply("به منوی مدیریت بازگشتید:", reply_markup=admin_menu)
+        await message.reply(f"✅ کاربر {user_id} بن شد.", reply_markup=admin_menu)
         await state.set_state(AdminStates.admin_panel)
     except Exception as e:
-        logger.error(f"خطا در بن کردن کاربر: {e}")
-        await message.reply(
-            "❌ خطایی رخ داد. لطفاً دوباره تلاش کنید:\n\n"
-            "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-            reply_markup=ban_menu
-        )
+        logger.error(f"Error banning user: {e}")
+        await message.reply("❌ خطا! دوباره تلاش کن.", reply_markup=ban_menu)
 
 async def process_unban_user(message: types.Message, state: FSMContext):
-    """پردازش آن‌بن کردن"""
     if message.from_user.id != ADMIN_ID:
         return
-    
     if message.text == "🔙 بازگشت به منوی مدیریت":
         await back_to_admin(message, state)
         return
-    
     try:
         user_id = message.text
         unban_user(user_id)
-        await message.reply(f"✅ کاربر با ID {user_id} آن‌بن شد.")
-        await message.reply("به منوی مدیریت بازگشتید:", reply_markup=admin_menu)
+        await message.reply(f"✅ کاربر {user_id} آن‌بن شد.", reply_markup=admin_menu)
         await state.set_state(AdminStates.admin_panel)
     except Exception as e:
-        logger.error(f"خطا در آن‌بن کردن کاربر: {e}")
-        await message.reply(
-            "❌ خطایی رخ داد. لطفاً دوباره تلاش کنید:\n\n"
-            "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-            reply_markup=ban_menu
-        )
+        logger.error(f"Error unbanning user: {e}")
+        await message.reply("❌ خطا! دوباره تلاش کن.", reply_markup=ban_menu)
 
 async def delete_content_menu(message: types.Message, state: FSMContext):
-    """نمایش منوی حذف محتوا"""
     if message.from_user.id != ADMIN_ID:
         return
-    
-    await message.reply(
-        "لطفاً نوع محتوا برای حذف را انتخاب کنید:", 
-        reply_markup=delete_menu
-    )
+    await message.reply("لطفاً نوع محتوا برای حذف رو انتخاب کن:", reply_markup=delete_menu)
     await state.set_state(AdminStates.delete_menu)
+    logger.info(f"Delete menu opened for admin: {message.from_user.id}")
 
 async def back_to_admin(message: types.Message, state: FSMContext):
-    """بازگشت به منوی مدیریت"""
     if message.from_user.id != ADMIN_ID:
         return
-    
-    current_state = await state.get_state()
-    if current_state is None:
-        return
-    
     await state.clear()
     await state.set_state(AdminStates.admin_panel)
-    await message.reply(
-        "به منوی مدیریت بازگشتید:", 
-        reply_markup=admin_menu
-    )
+    await message.reply("به منوی مدیریت بازگشتید:", reply_markup=admin_menu)
 
 async def delete_pamphlet_cmd(message: types.Message, state: FSMContext):
-    """نمایش لیست جزوات برای حذف"""
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id != ADMIN_ID or await state.get_state() != AdminStates.delete_menu:
+        logger.warning(f"Invalid state or user for delete_pamphlet_cmd: {message.from_user.id}, state: {await state.get_state()}")
         return
-    
-    current_state = await state.get_state()
-    if current_state != AdminStates.delete_menu:
-        return
-        
-    pamphlets = get_pamphlets()
-    if not pamphlets:
-        await message.reply(
-            "❌ هیچ جزوه‌ای موجود نیست!\n\n"
-            "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-            reply_markup=delete_menu
-        )
-        return
-    
-    response = "📝 **لیست جزوات:**\n\n"
-    for p in pamphlets:
-        response += f"- {p['title']} (ID: {p['id']})\n"
-        response += f"  👤 آپلود توسط: {p['uploaded_by']}\n\n"
-    
-    response += "\nبرای حذف، ID جزوه را وارد کنید:"
-    
-    await message.reply(response, reply_markup=delete_menu)
-    await state.set_state(AdminStates.waiting_for_delete_pamphlet)
+    try:
+        pamphlets = get_pamphlets()
+        if not pamphlets:
+            await message.reply("❌ هیچ جزوه‌ای نیست!", reply_markup=delete_menu)
+            return
+        response = "📝 **لیست جزوات:**\n\n" + "".join(f"- {p['title']} (ID: {p['id']})\n  👤 {p['uploaded_by']}\n\n" for p in pamphlets) + "ID جزوه رو وارد کن:"
+        if len(response) > 4096:
+            parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
+            for part in parts[:-1]:
+                await message.reply(part)
+            await message.reply(parts[-1], reply_markup=delete_menu)
+        else:
+            await message.reply(response, reply_markup=delete_menu)
+        await state.set_state(AdminStates.waiting_for_delete_pamphlet)
+        logger.info(f"Pamphlet list sent to admin: {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"Error in delete_pamphlet_cmd: {e}")
+        await message.reply("❌ خطا در گرفتن لیست جزوات! دوباره تلاش کن.", reply_markup=delete_menu)
 
 async def process_delete_pamphlet(message: types.Message, state: FSMContext):
-    """پردازش حذف جزوه"""
     if message.from_user.id != ADMIN_ID:
         return
-    
     if message.text == "🔙 بازگشت به منوی مدیریت":
         await back_to_admin(message, state)
         return
-    
     try:
         pamphlet_id = int(message.text)
-        result = delete_pamphlet(pamphlet_id)
-        if result:
-            await message.reply(f"✅ جزوه با ID {pamphlet_id} حذف شد.")
-            await message.reply("به منوی مدیریت بازگشتید:", reply_markup=admin_menu)
+        if delete_pamphlet(pamphlet_id):
+            await message.reply(f"✅ جزوه {pamphlet_id} حذف شد.", reply_markup=admin_menu)
             await state.set_state(AdminStates.admin_panel)
         else:
-            await message.reply(
-                "❌ جزوه با این ID یافت نشد! لطفاً دوباره امتحان کنید:\n\n"
-                "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-                reply_markup=delete_menu
-            )
+            await message.reply("❌ جزوه پیدا نشد! دوباره تلاش کن:", reply_markup=delete_menu)
     except ValueError:
-        await message.reply(
-            "❌ ID باید عدد باشه! لطفاً دوباره امتحان کنید:\n\n"
-            "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-            reply_markup=delete_menu
-        )
+        await message.reply("❌ ID باید عدد باشه!", reply_markup=delete_menu)
     except Exception as e:
-        logger.error(f"خطا در حذف جزوه: {e}")
-        await message.reply(
-            "❌ خطایی رخ داد. لطفاً دوباره تلاش کنید:\n\n"
-            "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-            reply_markup=delete_menu
-        )
+        logger.error(f"Error deleting pamphlet: {e}")
+        await message.reply("❌ خطا! دوباره تلاش کن:", reply_markup=delete_menu)
 
 async def delete_book_cmd(message: types.Message, state: FSMContext):
-    """نمایش لیست کتاب‌ها برای حذف"""
     if message.from_user.id != ADMIN_ID:
+        logger.warning(f"Unauthorized access to delete_book_cmd: {message.from_user.id}")
         return
-    
     current_state = await state.get_state()
     if current_state != AdminStates.delete_menu:
+        logger.warning(f"Wrong state for delete_book_cmd: {current_state}")
         return
-        
-    books = get_books()
-    if not books:
-        await message.reply(
-            "❌ هیچ کتابی موجود نیست!\n\n"
-            "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-            reply_markup=delete_menu
-        )
-        return
-    
-    response = "📚 **لیست کتاب‌ها:**\n\n"
-    for b in books:
-        response += f"- {b['title']} (ID: {b['id']})\n"
-        response += f"  👤 آپلود توسط: {b['uploaded_by']}\n\n"
-    
-    response += "\nبرای حذف، ID کتاب را وارد کنید:"
-    
-    await message.reply(response, reply_markup=delete_menu)
-    await state.set_state(AdminStates.waiting_for_delete_book)
+    try:
+        books = get_books()
+        if not books:
+            await message.reply("❌ هیچ کتابی نیست!", reply_markup=delete_menu)
+            logger.info("No books found in database")
+            return
+        response = "📚 **لیست کتاب‌ها:**\n\n" + "".join(f"- {b['title']} (ID: {b['id']})\n  👤 {b['uploaded_by']}\n\n" for b in books) + "ID کتاب رو وارد کن:"
+        if len(response) > 4096:
+            parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
+            for part in parts[:-1]:
+                await message.reply(part)
+            await message.reply(parts[-1], reply_markup=delete_menu)
+        else:
+            await message.reply(response, reply_markup=delete_menu)
+        await state.set_state(AdminStates.waiting_for_delete_book)
+        logger.info(f"Book list sent to admin: {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"Error in delete_book_cmd: {e}")
+        await message.reply("❌ خطا در گرفتن لیست کتاب‌ها! دوباره تلاش کن.", reply_markup=delete_menu)
 
 async def process_delete_book(message: types.Message, state: FSMContext):
-    """پردازش حذف کتاب"""
     if message.from_user.id != ADMIN_ID:
         return
-    
     if message.text == "🔙 بازگشت به منوی مدیریت":
         await back_to_admin(message, state)
         return
-    
     try:
         book_id = int(message.text)
-        result = delete_book(book_id)
-        if result:
-            await message.reply(f"✅ کتاب با ID {book_id} حذف شد.")
-            await message.reply("به منوی مدیریت بازگشتید:", reply_markup=admin_menu)
+        if delete_book(book_id):
+            await message.reply(f"✅ کتاب {book_id} حذف شد.", reply_markup=admin_menu)
             await state.set_state(AdminStates.admin_panel)
         else:
-            await message.reply(
-                "❌ کتاب با این ID یافت نشد! لطفاً دوباره امتحان کنید:\n\n"
-                "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-                reply_markup=delete_menu
-            )
+            await message.reply("❌ کتاب پیدا نشد! دوباره تلاش کن:", reply_markup=delete_menu)
     except ValueError:
-        await message.reply(
-            "❌ ID باید عدد باشه! لطفاً دوباره امتحان کنید:\n\n"
-            "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-            reply_markup=delete_menu
-        )
+        await message.reply("❌ ID باید عدد باشه!", reply_markup=delete_menu)
     except Exception as e:
-        logger.error(f"خطا در حذف کتاب: {e}")
-        await message.reply(
-            "❌ خطایی رخ داد. لطفاً دوباره تلاش کنید:\n\n"
-            "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-            reply_markup=delete_menu
-        )
+        logger.error(f"Error deleting book: {e}")
+        await message.reply("❌ خطا! دوباره تلاش کن:", reply_markup=delete_menu)
 
 async def delete_video_cmd(message: types.Message, state: FSMContext):
-    """نمایش لیست ویدیوها برای حذف"""
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id != ADMIN_ID or await state.get_state() != AdminStates.delete_menu:
         return
-    
-    current_state = await state.get_state()
-    if current_state != AdminStates.delete_menu:
-        return
-        
-    videos = get_videos()
-    if not videos:
-        await message.reply(
-            "❌ هیچ ویدیویی موجود نیست!\n\n"
-            "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-            reply_markup=delete_menu
-        )
-        return
-    
-    response = "🎬 **لیست ویدیوها:**\n\n"
-    for v in videos:
-        response += f"📌 **ویدیو شماره {v['id']}:**\n"
-        response += f"🆔 شناسه فایل: `{v['file_id']}`\n"
-        if v['caption']:
-            response += f"📝 کپشن: {v['caption']}\n"
-        response += f"👤 آپلودکننده: `{v['uploaded_by']}`\n"
-        response += "➖➖➖➖➖➖➖➖➖➖\n\n"
-    
-    response += "برای حذف، ID ویدیو را وارد کنید:"
-    
-    if len(response) > 4096:
-        parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
-        for part in parts[:-1]:
-            await message.reply(part, parse_mode="Markdown")
-        await message.reply(parts[-1], reply_markup=delete_menu, parse_mode="Markdown")
-    else:
-        await message.reply(response, reply_markup=delete_menu, parse_mode="Markdown")
-    
-    await state.set_state(AdminStates.waiting_for_delete_video)
+    try:
+        videos = get_videos()
+        if not videos:
+            await message.reply("❌ هیچ ویدیویی نیست!", reply_markup=delete_menu)
+            return
+        response = "🎬 **لیست ویدیوها:**\n\n" + "".join(f"- {v['caption'] or 'بدون کپشن'} (ID: {v['id']})\n  👤 {v['uploaded_by']}\n\n" for v in videos) + "ID ویدیو رو وارد کن:"
+        if len(response) > 4096:
+            parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
+            for part in parts[:-1]:
+                await message.reply(part)
+            await message.reply(parts[-1], reply_markup=delete_menu)
+        else:
+            await message.reply(response, reply_markup=delete_menu)
+        await state.set_state(AdminStates.waiting_for_delete_video)
+        logger.info(f"Video list sent to admin: {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"Error in delete_video_cmd: {e}")
+        await message.reply("❌ خطا در گرفتن لیست ویدیوها! دوباره تلاش کن.", reply_markup=delete_menu)
 
 async def process_delete_video(message: types.Message, state: FSMContext):
-    """پردازش حذف ویدیو"""
     if message.from_user.id != ADMIN_ID:
         return
-    
     if message.text == "🔙 بازگشت به منوی مدیریت":
         await back_to_admin(message, state)
         return
-    
     try:
         video_id = int(message.text)
-        result = delete_video(video_id)
-        if result:
-            await message.reply(f"✅ ویدیو با ID {video_id} حذف شد.")
-            await message.reply("به منوی مدیریت بازگشتید:", reply_markup=admin_menu)
+        if delete_video(video_id):
+            await message.reply(f"✅ ویدیو {video_id} حذف شد.", reply_markup=admin_menu)
             await state.set_state(AdminStates.admin_panel)
         else:
-            await message.reply(
-                "❌ ویدیو با این ID یافت نشد! لطفاً دوباره امتحان کنید:\n\n"
-                "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-                reply_markup=delete_menu
-            )
+            await message.reply("❌ ویدیو پیدا نشد! دوباره تلاش کن:", reply_markup=delete_menu)
     except ValueError:
-        await message.reply(
-            "❌ ID باید عدد باشه! لطفاً دوباره امتحان کنید:\n\n"
-            "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-            reply_markup=delete_menu
-        )
+        await message.reply("❌ ID باید عدد باشه!", reply_markup=delete_menu)
     except Exception as e:
-        logger.error(f"خطا در حذف ویدیو: {e}")
-        await message.reply(
-            "❌ خطایی رخ داد. لطفاً دوباره تلاش کنید:\n\n"
-            "⚠️ برای بازگشت به منوی مدیریت، روی دکمه زیر کلیک کنید.",
-            reply_markup=delete_menu
-        )
+        logger.error(f"Error deleting video: {e}")
+        await message.reply("❌ خطا! دوباره تلاش کن:", reply_markup=delete_menu)
 
 async def exit_admin(message: types.Message, state: FSMContext):
-    """خروج از بخش مدیریت"""
     if message.from_user.id != ADMIN_ID:
         return
-    
     await state.clear()
     await message.reply("از بخش مدیریت خارج شدی.", reply_markup=types.ReplyKeyboardRemove())
 
