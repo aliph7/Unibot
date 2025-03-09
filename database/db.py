@@ -47,7 +47,6 @@ def get_pamphlets(department=None, course=None):
             query["course"] = course
         pamphlets = list(pamphlets_collection.find(query))
         logger.info(f"Retrieved {len(pamphlets)} pamphlets from database")
-        # چک کردن داده‌ها
         for p in pamphlets:
             missing_fields = [field for field in ["title", "id", "uploaded_by"] if field not in p]
             if missing_fields:
@@ -83,7 +82,6 @@ def get_books():
     try:
         books = list(books_collection.find({}))
         logger.info(f"Retrieved {len(books)} books from database")
-        # چک کردن داده‌ها
         for b in books:
             missing_fields = [field for field in ["title", "id", "uploaded_by"] if field not in b]
             if missing_fields:
@@ -93,11 +91,18 @@ def get_books():
         logger.error(f"Error in get_books: {e}")
         return []
 
-def delete_book(book_id):
+def delete_book(book_id_or_title):
     try:
-        result = books_collection.delete_one({"id": book_id})
-        logger.info(f"Deleted book with ID: {book_id}, count: {result.deleted_count}")
-        return result.deleted_count > 0
+        # اگه عدد باشه، با id حذف می‌کنه
+        if isinstance(book_id_or_title, int):
+            result = books_collection.delete_one({"id": book_id_or_title})
+            logger.info(f"Deleted book with ID: {book_id_or_title}, count: {result.deleted_count}")
+            return result.deleted_count > 0
+        # اگه "نامشخص" یا رشته باشه، با title حذف می‌کنه
+        else:
+            result = books_collection.delete_one({"title": book_id_or_title})
+            logger.info(f"Deleted book with title: {book_id_or_title}, count: {result.deleted_count}")
+            return result.deleted_count > 0
     except Exception as e:
         logger.error(f"Error in delete_book: {e}")
         return False
@@ -120,7 +125,6 @@ def get_videos():
     try:
         videos = list(videos_collection.find({}))
         logger.info(f"Retrieved {len(videos)} videos from database")
-        # چک کردن داده‌ها
         for v in videos:
             missing_fields = [field for field in ["id", "uploaded_by"] if field not in v]
             if missing_fields:
