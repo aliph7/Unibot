@@ -1,14 +1,14 @@
 import logging
 import os
-import asyncio  # اضافه شد
+import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 from config.config import Config
 from database.db import setup_database
-from handlers import start, pamphlets, books, videos, admin  # اضافه کردن admin
-from middlewares import BanMiddleware  # اضافه کردن میدلور
+from handlers import start, pamphlets, books, videos, admin
+from middlewares import BanMiddleware
 
 # تنظیم لاگینگ
 logging.basicConfig(level=logging.INFO)
@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 # تنظیمات Webhook
 WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = os.getenv("BASE_URL", "https://unibot-vfzt.onrender.com") + WEBHOOK_PATH  # از متغیر محیطی
+WEBHOOK_URL = os.getenv("BASE_URL", "https://unibot-vfzt.onrender.com") + WEBHOOK_PATH
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = int(os.getenv("PORT", 8080))
 
-async def on_startup  def on_startup(bot: Bot):
+async def on_startup(bot: Bot):
     """تنظیم Webhook موقع شروع"""
     logger.info("Setting up webhook...")
     await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
@@ -47,7 +47,7 @@ async def main():
         books.register_handlers(dp)
         pamphlets.register_handlers(dp)
         videos.register_handlers(dp)
-        admin.register_handlers(dp)  # اضافه کردن ادمین
+        admin.register_handlers(dp)
         
         # تنظیم Webhook
         dp.startup.register(on_startup)
