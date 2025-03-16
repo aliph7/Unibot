@@ -1,8 +1,9 @@
+import os
 from dataclasses import dataclass
 
 @dataclass
 class Config:
-    TOKEN: str = "7793901040:AAHw4jrYfYOKPRk0vTe7svIIwx4iJ97I6wg"
+    TOKEN: str = os.getenv("TOKEN", "توکن‌_پیش‌فرض")
 
 # تعریف رشته‌ها و درس‌ها
 DEPARTMENTS = {
@@ -19,4 +20,4 @@ COURSES = {
     "mechanical": ["استاتیک", "دینامیک", "مقاومت مصالح", "ترمودینامیک", "سیالات"],
     "civil": ["مقاومت مصالح", "تحلیل سازه", "مکانیک خاک", "بتن", "سازه‌های فولادی"],
     "chemistry": ["شیمی عمومی", "شیمی آلی", "انتقال حرارت", "ترمودینامیک", "کنترل فرآیند"]
-} 
+}
