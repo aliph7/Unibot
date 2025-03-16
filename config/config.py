@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class Config:
-    TOKEN: str = os.getenv("TOKEN", "توکن‌_پیش‌فرض")
+    TOKEN: str = os.getenv("TOKEN")
 
 # تعریف رشته‌ها و درس‌ها
 DEPARTMENTS = {
