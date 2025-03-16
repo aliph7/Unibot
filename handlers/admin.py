@@ -2,6 +2,7 @@ from aiogram import types, Dispatcher
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command, StateFilter
+from aiogram.types import Message
 from database.db import get_pamphlets, get_books, get_videos, delete_pamphlet, delete_book, delete_video, ban_user, is_user_banned, get_user_count, get_all_users, unban_user
 from aiogram.fsm.state import State, StatesGroup
 import logging
@@ -48,7 +49,7 @@ ban_menu = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-async def cmd_boss(message:TransferredType, state: FSMContext):
+async def cmd_boss(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         await message.reply("❌ شما دسترسی به این بخش را ندارید!")
         return
