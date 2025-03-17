@@ -112,13 +112,17 @@ async def ban_user_cmd(message: types.Message, state: FSMContext):
         response = "👥 لیست کاربران:\n\n"
         for user_id, is_banned in users:
             numeric_id = user_id
+            username = None
             if not user_id.isdigit():
                 user_doc = users_collection.find_one({"user_id": user_id})
                 numeric_id = user_doc.get("user_id") if user_doc and user_doc.get("user_id").isdigit() else "نامشخص"
-                response += f"👤 {user_id} (ID: {numeric_id}) - {'🚫 بن شده' if is_banned else '✅ فعال'}\n"
+                username = user_doc.get("username") if user_doc and user_doc.get("username") else user_id
+                response += f"👤 {username} (ID: {numeric_id}) - {'🚫 بن شده' if is_banned else '✅ فعال'}\n"
             else:
-                response += f"👤 {user_id} - {'🚫 بن شده' if is_banned else '✅ فعال'}\n"
-        response += "\nبرای بن یا آن‌بن کردن، ID عددی رو وارد کن:"
+                user_doc = users_collection.find_one({"user_id": user_id})
+                username = user_doc.get("username") if user_doc and user_doc.get("username") else "نامشخص"
+                response += f"👤 {username} (ID: {user_id}) - {'🚫 بن شده' if is_banned else '✅ فعال'}\n"
+        response += "\nبرای بن یا آن‌بن کردن، ID عددی یا username رو وارد کن:"
         logger.info(f"Sending response: {response}")
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
@@ -135,7 +139,7 @@ async def ban_user_start(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
     try:
-        await message.reply("🚫 ID عددی کاربر رو برای بن کردن وارد کن (مثلاً 7488819947):", reply_markup=ban_menu)
+        await message.reply("🚫 ID عددی یا username کاربر رو برای بن کردن وارد کن (مثلاً 7488819947 یا super_boob_man):", reply_markup=ban_menu)
         await state.set_state(AdminStates.waiting_for_ban_id)
     except Exception as e:
         logger.error(f"Error in ban_user_start: {e}", exc_info=True)
@@ -145,7 +149,7 @@ async def unban_user_start(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
     try:
-        await message.reply("✅ ID عددی کاربر رو برای آن‌بن کردن وارد کن (مثلاً 7488819947):", reply_markup=ban_menu)
+        await message.reply("✅ ID عددی یا username کاربر رو برای آن‌بن کردن وارد کن (مثلاً 7488819947 یا super_boob_man):", reply_markup=ban_menu)
         await state.set_state(AdminStates.waiting_for_unban_id)
     except Exception as e:
         logger.error(f"Error in unban_user_start: {e}", exc_info=True)
@@ -158,12 +162,20 @@ async def process_ban_user(message: types.Message, state: FSMContext):
         await back_to_admin(message, state)
         return
     try:
-        user_id = message.text.strip()
-        if not user_id.isdigit():
-            await message.reply("❌ لطفاً فقط ID عددی وارد کن (مثلاً 7488819947)!", reply_markup=ban_menu)
-            return
+        from database.db import users_collection
+        input_value = message.text.strip()
+        
+        if input_value.isdigit():
+            user_id = input_value
+        else:
+            user_doc = users_collection.find_one({"username": input_value})
+            if not user_doc or not user_doc.get("user_id"):
+                await message.reply("❌ این username پیدا نشد یا user_id ثبت نشده! دوباره تلاش کن.", reply_markup=ban_menu)
+                return
+            user_id = user_doc["user_id"]
+        
         ban_user(user_id)
-        await message.reply(f"✅ کاربر {user_id} بن شد.", reply_markup=admin_menu)
+        await message.reply(f"✅ کاربر {input_value} (ID: {user_id}) بن شد.", reply_markup=admin_menu)
         await state.set_state(AdminStates.admin_panel)
     except Exception as e:
         logger.error(f"Error in process_ban_user: {e}", exc_info=True)
@@ -176,12 +188,20 @@ async def process_unban_user(message: types.Message, state: FSMContext):
         await back_to_admin(message, state)
         return
     try:
-        user_id = message.text.strip()
-        if not user_id.isdigit():
-            await message.reply("❌ لطفاً فقط ID عددی وارد کن (مثلاً 7488819947)!", reply_markup=ban_menu)
-            return
+        from database.db import users_collection
+        input_value = message.text.strip()
+        
+        if input_value.isdigit():
+            user_id = input_value
+        else:
+            user_doc = users_collection.find_one({"username": input_value})
+            if not user_doc or not user_doc.get("user_id"):
+                await message.reply("❌ این username پیدا نشد یا user_id ثبت نشده! دوباره تلاش کن.", reply_markup=ban_menu)
+                return
+            user_id = user_doc["user_id"]
+        
         unban_user(user_id)
-        await message.reply(f"✅ کاربر {user_id} آن‌بن شد.", reply_markup=admin_menu)
+        await message.reply(f"✅ کاربر {input_value} (ID: {user_id}) آن‌بن شد.", reply_markup=admin_menu)
         await state.set_state(AdminStates.admin_panel)
     except Exception as e:
         logger.error(f"Error in process_unban_user: {e}", exc_info=True)
