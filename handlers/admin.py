@@ -2,7 +2,6 @@ from aiogram import types, Dispatcher
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command, StateFilter
-from aiogram.types import Message
 from database.db import get_pamphlets, get_books, get_videos, delete_pamphlet, delete_book, delete_video, ban_user, is_user_banned, get_user_count, get_all_users, unban_user
 from aiogram.fsm.state import State, StatesGroup
 import logging
@@ -49,7 +48,7 @@ ban_menu = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-async def cmd_boss(message: Message, state: FSMContext):
+async def cmd_boss(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         await message.reply("❌ شما دسترسی به این بخش را ندارید!")
         return
@@ -100,6 +99,7 @@ async def ban_user_cmd(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
     try:
+        from database.db import users_collection  # برای دسترسی مستقیم به users_collection
         users = get_all_users()
         logger.info(f"Users retrieved: {users}")
         if not users:
@@ -107,13 +107,16 @@ async def ban_user_cmd(message: types.Message, state: FSMContext):
             return
         response = "👥 لیست کاربران:\n\n"
         for user_id, is_banned in users:
-            if user_id.isdigit():
-                response += f"👤 {user_id} - {'🚫 بن شده' if is_banned else '✅ فعال'}\n"
+            numeric_id = user_id
+            if not user_id.isdigit():  # اگه username بود
+                user_doc = users_collection.find_one({"user_id": user_id})
+                numeric_id = user_doc.get("user_id") if user_doc and user_doc.get("user_id").isdigit() else "نامشخص"
+                response += f"👤 {user_id} (ID: {numeric_id}) - {'🚫 بن شده' if is_banned else '✅ فعال'}\n"
             else:
-                response += f"👤 {user_id} - {'🚫 بن شده' if is_banned else '✅ فعال'} (⚠️ این usernameه، لطفاً توی دیتابیس به user_id عددی تغییر بده)\n"
-        response += "\nبرای بن یا آن‌بن کردن، از دکمه‌ها استفاده کنید:"
+                response += f"👤 {user_id} - {'🚫 بن شده' if is_banned else '✅ فعال'}\n"
+        response += "\nبرای بن یا آن‌بن کردن، ID عددی رو وارد کن:"
         logger.info(f"Sending response: {response}")
-        await message.reply(response, reply_markup=ban_menu)  # بدون Markdown
+        await message.reply(response, reply_markup=ban_menu)
         await state.set_state(AdminStates.admin_panel)
     except Exception as e:
         logger.error(f"Error in ban_user_cmd: {e}")
