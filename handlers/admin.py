@@ -52,9 +52,13 @@ async def cmd_boss(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         await message.reply("❌ شما دسترسی به این بخش را ندارید!")
         return
-    await message.reply("به بخش مدیریت خوش اومدی! لطفاً انتخاب کن:", reply_markup=admin_menu)
-    await state.set_state(AdminStates.admin_panel)
-    logger.info(f"Admin panel opened for user: {message.from_user.id}")
+    try:
+        await message.reply("به بخش مدیریت خوش اومدی! لطفاً انتخاب کن:", reply_markup=admin_menu)
+        await state.set_state(AdminStates.admin_panel)
+        logger.info(f"Admin panel opened for user: {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"Error in cmd_boss: {e}", exc_info=True)
+        await message.reply("❌ خطا در باز کردن پنل مدیریت! دوباره تلاش کن.")
 
 async def list_files(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
@@ -77,7 +81,7 @@ async def list_files(message: types.Message, state: FSMContext):
             await message.reply(response)
         logger.info(f"File list sent to admin: {message.from_user.id}")
     except Exception as e:
-        logger.error(f"Error in list_files: {e}")
+        logger.error(f"Error in list_files: {e}", exc_info=True)
         await message.reply("❌ خطا در گرفتن لیست فایل‌ها! دوباره تلاش کن.", reply_markup=admin_menu)
 
 async def show_stats(message: types.Message, state: FSMContext):
@@ -92,14 +96,14 @@ async def show_stats(message: types.Message, state: FSMContext):
         await message.reply(stats)
         logger.info(f"Stats sent to admin: {message.from_user.id}")
     except Exception as e:
-        logger.error(f"Error in show_stats: {e}")
+        logger.error(f"Error in show_stats: {e}", exc_info=True)
         await message.reply("❌ خطا در گرفتن آمار! دوباره تلاش کن.", reply_markup=admin_menu)
 
 async def ban_user_cmd(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
     try:
-        from database.db import users_collection  # برای دسترسی مستقیم به users_collection
+        from database.db import users_collection
         users = get_all_users()
         logger.info(f"Users retrieved: {users}")
         if not users:
@@ -108,7 +112,7 @@ async def ban_user_cmd(message: types.Message, state: FSMContext):
         response = "👥 لیست کاربران:\n\n"
         for user_id, is_banned in users:
             numeric_id = user_id
-            if not user_id.isdigit():  # اگه username بود
+            if not user_id.isdigit():
                 user_doc = users_collection.find_one({"user_id": user_id})
                 numeric_id = user_doc.get("user_id") if user_doc and user_doc.get("user_id").isdigit() else "نامشخص"
                 response += f"👤 {user_id} (ID: {numeric_id}) - {'🚫 بن شده' if is_banned else '✅ فعال'}\n"
@@ -116,23 +120,36 @@ async def ban_user_cmd(message: types.Message, state: FSMContext):
                 response += f"👤 {user_id} - {'🚫 بن شده' if is_banned else '✅ فعال'}\n"
         response += "\nبرای بن یا آن‌بن کردن، ID عددی رو وارد کن:"
         logger.info(f"Sending response: {response}")
-        await message.reply(response, reply_markup=ban_menu)
+        if len(response) > 4096:
+            parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
+            for part in parts:
+                await message.reply(part)
+        else:
+            await message.reply(response, reply_markup=ban_menu)
         await state.set_state(AdminStates.admin_panel)
     except Exception as e:
-        logger.error(f"Error in ban_user_cmd: {e}")
+        logger.error(f"Error in ban_user_cmd: {e}", exc_info=True)
         await message.reply(f"❌ خطا در گرفتن لیست کاربران: {str(e)}. دوباره تلاش کن.", reply_markup=admin_menu)
 
 async def ban_user_start(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
-    await message.reply("🚫 ID عددی کاربر رو برای بن کردن وارد کن (مثلاً 7488819947):", reply_markup=ban_menu)
-    await state.set_state(AdminStates.waiting_for_ban_id)
+    try:
+        await message.reply("🚫 ID عددی کاربر رو برای بن کردن وارد کن (مثلاً 7488819947):", reply_markup=ban_menu)
+        await state.set_state(AdminStates.waiting_for_ban_id)
+    except Exception as e:
+        logger.error(f"Error in ban_user_start: {e}", exc_info=True)
+        await message.reply("❌ خطا! دوباره تلاش کن.", reply_markup=admin_menu)
 
 async def unban_user_start(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
-    await message.reply("✅ ID عددی کاربر رو برای آن‌بن کردن وارد کن (مثلاً 7488819947):", reply_markup=ban_menu)
-    await state.set_state(AdminStates.waiting_for_unban_id)
+    try:
+        await message.reply("✅ ID عددی کاربر رو برای آن‌بن کردن وارد کن (مثلاً 7488819947):", reply_markup=ban_menu)
+        await state.set_state(AdminStates.waiting_for_unban_id)
+    except Exception as e:
+        logger.error(f"Error in unban_user_start: {e}", exc_info=True)
+        await message.reply("❌ خطا! دوباره تلاش کن.", reply_markup=admin_menu)
 
 async def process_ban_user(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
@@ -149,7 +166,7 @@ async def process_ban_user(message: types.Message, state: FSMContext):
         await message.reply(f"✅ کاربر {user_id} بن شد.", reply_markup=admin_menu)
         await state.set_state(AdminStates.admin_panel)
     except Exception as e:
-        logger.error(f"Error banning user: {e}")
+        logger.error(f"Error in process_ban_user: {e}", exc_info=True)
         await message.reply("❌ خطا! دوباره تلاش کن.", reply_markup=ban_menu)
 
 async def process_unban_user(message: types.Message, state: FSMContext):
@@ -167,22 +184,30 @@ async def process_unban_user(message: types.Message, state: FSMContext):
         await message.reply(f"✅ کاربر {user_id} آن‌بن شد.", reply_markup=admin_menu)
         await state.set_state(AdminStates.admin_panel)
     except Exception as e:
-        logger.error(f"Error unbanning user: {e}")
+        logger.error(f"Error in process_unban_user: {e}", exc_info=True)
         await message.reply("❌ خطا! دوباره تلاش کن.", reply_markup=ban_menu)
 
 async def delete_content_menu(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
-    await message.reply("لطفاً نوع محتوا برای حذف رو انتخاب کن:", reply_markup=delete_menu)
-    await state.set_state(AdminStates.delete_menu)
-    logger.info(f"Delete menu opened for admin: {message.from_user.id}")
+    try:
+        await message.reply("لطفاً نوع محتوا برای حذف رو انتخاب کن:", reply_markup=delete_menu)
+        await state.set_state(AdminStates.delete_menu)
+        logger.info(f"Delete menu opened for admin: {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"Error in delete_content_menu: {e}", exc_info=True)
+        await message.reply("❌ خطا! دوباره تلاش کن.", reply_markup=admin_menu)
 
 async def back_to_admin(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
-    await state.clear()
-    await state.set_state(AdminStates.admin_panel)
-    await message.reply("به منوی مدیریت بازگشتید:", reply_markup=admin_menu)
+    try:
+        await state.clear()
+        await state.set_state(AdminStates.admin_panel)
+        await message.reply("به منوی مدیریت بازگشتید:", reply_markup=admin_menu)
+    except Exception as e:
+        logger.error(f"Error in back_to_admin: {e}", exc_info=True)
+        await message.reply("❌ خطا در بازگشت! دوباره تلاش کن.")
 
 async def delete_pamphlet_cmd(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID or await state.get_state() != AdminStates.delete_menu:
@@ -196,15 +221,14 @@ async def delete_pamphlet_cmd(message: types.Message, state: FSMContext):
         response = "📝 لیست جزوات:\n\n" + "".join(f"- {p['title']} (ID: {p.get('id', 'نامشخص')})\n  👤 ID: {p.get('uploaded_by', 'ناشناس')}\n\n" for p in pamphlets) + "ID جزوه رو وارد کن:"
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
-            for part in parts[:-1]:
+            for part in parts:
                 await message.reply(part)
-            await message.reply(parts[-1], reply_markup=delete_menu)
         else:
             await message.reply(response, reply_markup=delete_menu)
         await state.set_state(AdminStates.waiting_for_delete_pamphlet)
         logger.info(f"Pamphlet list sent to admin: {message.from_user.id}")
     except Exception as e:
-        logger.error(f"Error in delete_pamphlet_cmd: {e}")
+        logger.error(f"Error in delete_pamphlet_cmd: {e}", exc_info=True)
         await message.reply("❌ خطا در گرفتن لیست جزوات! دوباره تلاش کن.", reply_markup=delete_menu)
 
 async def process_delete_pamphlet(message: types.Message, state: FSMContext):
@@ -223,7 +247,7 @@ async def process_delete_pamphlet(message: types.Message, state: FSMContext):
     except ValueError:
         await message.reply("❌ ID باید عدد باشه!", reply_markup=delete_menu)
     except Exception as e:
-        logger.error(f"Error deleting pamphlet: {e}")
+        logger.error(f"Error in process_delete_pamphlet: {e}", exc_info=True)
         await message.reply("❌ خطا! دوباره تلاش کن:", reply_markup=delete_menu)
 
 async def delete_book_cmd(message: types.Message, state: FSMContext):
@@ -243,15 +267,14 @@ async def delete_book_cmd(message: types.Message, state: FSMContext):
         response = "📚 لیست کتاب‌ها:\n\n" + "".join(f"- {b['title']} (ID: {b.get('id', 'نامشخص')})\n  👤 ID: {b.get('uploaded_by', 'ناشناس')}\n\n" for b in books) + "ID کتاب رو وارد کن (یا عنوان کامل برای کتاب‌های بدون ID):"
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
-            for part in parts[:-1]:
+            for part in parts:
                 await message.reply(part)
-            await message.reply(parts[-1], reply_markup=delete_menu)
         else:
             await message.reply(response, reply_markup=delete_menu)
         await state.set_state(AdminStates.waiting_for_delete_book)
         logger.info(f"Book list sent to admin: {message.from_user.id}")
     except Exception as e:
-        logger.error(f"Error in delete_book_cmd: {e}")
+        logger.error(f"Error in delete_book_cmd: {e}", exc_info=True)
         await message.reply("❌ خطا در گرفتن لیست کتاب‌ها! دوباره تلاش کن.", reply_markup=delete_menu)
 
 async def process_delete_book(message: types.Message, state: FSMContext):
@@ -278,7 +301,7 @@ async def process_delete_book(message: types.Message, state: FSMContext):
             else:
                 await message.reply("❌ کتاب پیدا نشد! دوباره تلاش کن:", reply_markup=delete_menu)
     except Exception as e:
-        logger.error(f"Error deleting book: {e}")
+        logger.error(f"Error in process_delete_book: {e}", exc_info=True)
         await message.reply("❌ خطا! دوباره تلاش کن:", reply_markup=delete_menu)
 
 async def delete_video_cmd(message: types.Message, state: FSMContext):
@@ -292,15 +315,14 @@ async def delete_video_cmd(message: types.Message, state: FSMContext):
         response = "🎬 لیست ویدیوها:\n\n" + "".join(f"- {v.get('caption', 'بدون کپشن')} (ID: {v.get('id', 'نامشخص')})\n  👤 ID: {v.get('uploaded_by', 'ناشناس')}\n\n" for v in videos) + "ID ویدیو رو وارد کن:"
         if len(response) > 4096:
             parts = [response[i:i+4096] for i in range(0, len(response), 4096)]
-            for part in parts[:-1]:
+            for part in parts:
                 await message.reply(part)
-            await message.reply(parts[-1], reply_markup=delete_menu)
         else:
             await message.reply(response, reply_markup=delete_menu)
         await state.set_state(AdminStates.waiting_for_delete_video)
         logger.info(f"Video list sent to admin: {message.from_user.id}")
     except Exception as e:
-        logger.error(f"Error in delete_video_cmd: {e}")
+        logger.error(f"Error in delete_video_cmd: {e}", exc_info=True)
         await message.reply("❌ خطا در گرفتن لیست ویدیوها! دوباره تلاش کن.", reply_markup=delete_menu)
 
 async def process_delete_video(message: types.Message, state: FSMContext):
@@ -319,34 +341,42 @@ async def process_delete_video(message: types.Message, state: FSMContext):
     except ValueError:
         await message.reply("❌ ID باید عدد باشه!", reply_markup=delete_menu)
     except Exception as e:
-        logger.error(f"Error deleting video: {e}")
+        logger.error(f"Error in process_delete_video: {e}", exc_info=True)
         await message.reply("❌ خطا! دوباره تلاش کن:", reply_markup=delete_menu)
 
 async def exit_admin(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
-    await state.clear()
-    await message.reply("از بخش مدیریت خارج شدی.", reply_markup=types.ReplyKeyboardRemove())
+    try:
+        await state.clear()
+        await message.reply("از بخش مدیریت خارج شدی.", reply_markup=types.ReplyKeyboardRemove())
+    except Exception as e:
+        logger.error(f"Error in exit_admin: {e}", exc_info=True)
+        await message.reply("❌ خطا در خروج! دوباره تلاش کن.")
 
 def register_handlers(dp: Dispatcher):
-    dp.message.register(cmd_boss, Command("boss"))
-    dp.message.register(list_files, lambda message: message.text == "📂 لیست فایل‌ها", StateFilter(AdminStates.admin_panel))
-    dp.message.register(show_stats, lambda message: message.text == "📊 آمار ربات", StateFilter(AdminStates.admin_panel))
-    dp.message.register(ban_user_cmd, lambda message: message.text == "🚫 بن کردن کاربر", StateFilter(AdminStates.admin_panel))
-    dp.message.register(delete_content_menu, lambda message: message.text == "❌ حذف محتوا", StateFilter(AdminStates.admin_panel))
-    dp.message.register(exit_admin, lambda message: message.text == "🔙 خروج از مدیریت", StateFilter(AdminStates.admin_panel))
-    
-    dp.message.register(delete_pamphlet_cmd, lambda message: message.text == "📝 حذف جزوه", StateFilter(AdminStates.delete_menu))
-    dp.message.register(delete_book_cmd, lambda message: message.text == "📚 حذف کتاب", StateFilter(AdminStates.delete_menu))
-    dp.message.register(delete_video_cmd, lambda message: message.text == "🎬 حذف ویدیو", StateFilter(AdminStates.delete_menu))
-    
-    dp.message.register(process_delete_pamphlet, StateFilter(AdminStates.waiting_for_delete_pamphlet))
-    dp.message.register(process_delete_book, StateFilter(AdminStates.waiting_for_delete_book))
-    dp.message.register(process_delete_video, StateFilter(AdminStates.waiting_for_delete_video))
-    
-    dp.message.register(ban_user_start, lambda message: message.text == "🚫 بن کردن", StateFilter(AdminStates.admin_panel))
-    dp.message.register(unban_user_start, lambda message: message.text == "✅ آن‌بن کردن", StateFilter(AdminStates.admin_panel))
-    dp.message.register(process_ban_user, StateFilter(AdminStates.waiting_for_ban_id))
-    dp.message.register(process_unban_user, StateFilter(AdminStates.waiting_for_unban_id))
-    
-    dp.message.register(back_to_admin, lambda message: message.text == "🔙 بازگشت به منوی مدیریت")
+    try:
+        dp.message.register(cmd_boss, Command("boss"))
+        dp.message.register(list_files, lambda message: message.text == "📂 لیست فایل‌ها", StateFilter(AdminStates.admin_panel))
+        dp.message.register(show_stats, lambda message: message.text == "📊 آمار ربات", StateFilter(AdminStates.admin_panel))
+        dp.message.register(ban_user_cmd, lambda message: message.text == "🚫 بن کردن کاربر", StateFilter(AdminStates.admin_panel))
+        dp.message.register(delete_content_menu, lambda message: message.text == "❌ حذف محتوا", StateFilter(AdminStates.admin_panel))
+        dp.message.register(exit_admin, lambda message: message.text == "🔙 خروج از مدیریت", StateFilter(AdminStates.admin_panel))
+        
+        dp.message.register(delete_pamphlet_cmd, lambda message: message.text == "📝 حذف جزوه", StateFilter(AdminStates.delete_menu))
+        dp.message.register(delete_book_cmd, lambda message: message.text == "📚 حذف کتاب", StateFilter(AdminStates.delete_menu))
+        dp.message.register(delete_video_cmd, lambda message: message.text == "🎬 حذف ویدیو", StateFilter(AdminStates.delete_menu))
+        
+        dp.message.register(process_delete_pamphlet, StateFilter(AdminStates.waiting_for_delete_pamphlet))
+        dp.message.register(process_delete_book, StateFilter(AdminStates.waiting_for_delete_book))
+        dp.message.register(process_delete_video, StateFilter(AdminStates.waiting_for_delete_video))
+        
+        dp.message.register(ban_user_start, lambda message: message.text == "🚫 بن کردن", StateFilter(AdminStates.admin_panel))
+        dp.message.register(unban_user_start, lambda message: message.text == "✅ آن‌بن کردن", StateFilter(AdminStates.admin_panel))
+        dp.message.register(process_ban_user, StateFilter(AdminStates.waiting_for_ban_id))
+        dp.message.register(process_unban_user, StateFilter(AdminStates.waiting_for_unban_id))
+        
+        dp.message.register(back_to_admin, lambda message: message.text == "🔙 بازگشت به منوی مدیریت")
+        logger.info("Handlers registered successfully")
+    except Exception as e:
+        logger.error(f"Error registering handlers: {e}", exc_info=True)
