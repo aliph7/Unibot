@@ -27,6 +27,11 @@ async def on_startup(bot: Bot):
     logger.info("Setting up webhook...")
     await bot.set_webhook(url=WEBHOOK_URL)
 
+# تابع جدید برای پینگ
+async def handle_ping(request):
+    logger.info("Received ping request")
+    return web.Response(text="Pong", status=200)
+
 def main():
     try:
         logger.info("Starting bot...")
@@ -46,13 +51,14 @@ def main():
         register_books_handlers(dp)
         register_pamphlets_handlers(dp)
         register_videos_handlers(dp)
-        register_admin_handlers(dp)  # اضافه کردن ادمین
+        register_admin_handlers(dp)
         
         dp.startup.register(on_startup)
         
         app = web.Application()
         webhook_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
         webhook_handler.register(app, path=WEBHOOK_PATH)
+        app.router.add_get("/ping", handle_ping)  # اضافه کردن مسیر پینگ
         setup_application(app, dp, bot=bot)
         
         logger.info(f"Starting webhook server on {WEBAPP_HOST}:{WEBAPP_PORT}...")
