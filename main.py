@@ -12,6 +12,7 @@ from handlers.books import register_handlers as register_books_handlers
 from handlers.videos import register_handlers as register_videos_handlers
 from handlers.admin import register_handlers as register_admin_handlers
 from middlewares import BanMiddleware
+from handlers.ai import register_handlers as register_ai_handlers
 
 # تنظیم لاگینگ
 logging.basicConfig(level=logging.INFO)
@@ -52,6 +53,7 @@ def main():
         register_pamphlets_handlers(dp)
         register_videos_handlers(dp)
         register_admin_handlers(dp)
+        register_ai_handlers(dp)
         
         dp.startup.register(on_startup)
         
