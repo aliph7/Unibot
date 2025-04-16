@@ -1,25 +1,39 @@
 from pymongo import MongoClient
 import os
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 client = MongoClient(os.getenv("MONGO_URI", "YOUR_MONGODB_CONNECTION_STRING"))
 db = client["university_bot"]
 
+# مجموعه‌های موجود
 pamphlets_collection = db["pamphlets"]
 books_collection = db["books"]
 videos_collection = db["videos"]
 users_collection = db["users"]
 
+# مجموعه جدید برای تعاملات AI
+ai_interactions_collection = db["ai_interactions"]
+
 def setup_database():
+    """اتصال به MongoDB و تنظیمات اولیه"""
     try:
         client.server_info()
         logger.info("Connected to MongoDB successfully")
+        
+        # تنظیم TTL Index برای مجموعه ai_interactions
+        try:
+            ai_interactions_collection.create_index("expire_at", expireAfterSeconds=3600)
+            logger.info("TTL Index برای ai_interactions تنظیم شد")
+        except Exception as e:
+            logger.error(f"خطا در تنظیم TTL Index برای ai_interactions: {e}")
     except Exception as e:
         logger.error(f"Failed to connect to MongoDB: {e}")
         raise e
 
+# توابع مربوط به جزوات
 def add_pamphlet(title, file_id, department, course, uploaded_by, upload_date):
     pamphlet = {
         "id": pamphlets_collection.count_documents({}) + 1,
@@ -62,6 +76,7 @@ def delete_pamphlet(pamphlet_id):
         logger.error(f"Error in delete_pamphlet: {e}")
         return False
 
+# توابع مربوط به کتاب‌ها
 def add_book(title, file_id, uploaded_by, upload_date):
     book = {
         "id": books_collection.count_documents({}) + 1,
@@ -102,6 +117,7 @@ def delete_book(book_id_or_title):
         logger.error(f"Error in delete_book: {e}")
         return False
 
+# توابع مربوط به ویدیوها
 def add_video(file_id, file_unique_id, caption, uploaded_by, upload_date):
     video = {
         "id": videos_collection.count_documents({}) + 1,
@@ -138,6 +154,7 @@ def delete_video(video_id):
         logger.error(f"Error in delete_video: {e}")
         return False
 
+# توابع مربوط به کاربران
 def ban_user(user_id):
     try:
         result = users_collection.update_one(
@@ -213,3 +230,34 @@ def add_user(user_id):
             logger.info(f"Added user: {user_id}")
     except Exception as e:
         logger.error(f"Error in add_user: {e}")
+
+# توابع مربوط به تعاملات AI
+def add_ai_interaction(user_id, input_text, response_text):
+    """ذخیره تعامل جدید با AI"""
+    try:
+        interaction = {
+            "user_id": str(user_id),
+            "input": input_text,
+            "response": response_text,
+            "timestamp": datetime.now(),
+            "expire_at": datetime.now()  # برای TTL Index
+        }
+        result = ai_interactions_collection.insert_one(interaction)
+        logger.info(f"Added AI interaction for user: {user_id}")
+        return result.inserted_id
+    except Exception as e:
+        logger.error(f"Error in add_ai_interaction: {e}")
+        return None
+
+def get_ai_interactions(user_id=None):
+    """بازیابی تعاملات AI (اختیاری: بر اساس کاربر)"""
+    try:
+        query = {}
+        if user_id:
+            query["user_id"] = str(user_id)
+        interactions = list(ai_interactions_collection.find(query))
+        logger.info(f"Retrieved {len(interactions)} AI interactions")
+        return interactions
+    except Exception as e:
+        logger.error(f"Error in get_ai_interactions: {e}")
+        return []
