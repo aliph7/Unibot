@@ -1,10 +1,12 @@
 import logging
 import os
 from aiogram import Router, types
-from aiogram.filters import Command, RegexpCommandsFilter
+from aiogram.filters import Text
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime
 import google.generativeai as genai
-from database.db import db, users_collection  # وارد کردن اتصال دیتابیس از db.py
+from database.db import db, users_collection
 
 # تنظیمات لاگ
 logging.basicConfig(level=logging.INFO)
@@ -39,17 +41,22 @@ try:
 except Exception as e:
     logger.error(f"خطا در تنظیم TTL Index: {e}")
 
-# هندلر برای دستور /ai
-@ai_router.message(Command("ai"))
-async def ai_start(message: types.Message):
+# تعریف حالت‌ها
+class AIStates(StatesGroup):
+    chatting = State()
+
+# هندلر برای دکمه "توت یار"
+@ai_router.message(Text(text="🤖 توت یار"))
+async def ai_start(message: types.Message, state: FSMContext):
     info_text = "📌 اطلاعات چت شما تا 1 ساعت ذخیره می‌شود و بعد به‌صورت خودکار از دیتابیس حذف خواهد شد."
     welcome_text = "سلام! من توت یار هستم، دوستت برای درس و مشق! 😊 سؤالت رو بپرس، باهم حلش می‌کنیم!"
     try:
         await message.reply(info_text)
         await message.reply(welcome_text)
-        logger.info(f"AI welcome sent to user: {message.from_user.id}")
+        await state.set_state(AIStates.chatting)
+        logger.info(f"AI mode started for user: {message.from_user.id}")
         
-        # ثبت کاربر در users_collection (هماهنگ با db.py)
+        # ثبت کاربر در users_collection
         users_collection.update_one(
             {"user_id": str(message.from_user.id)},
             {"$set": {
@@ -60,13 +67,13 @@ async def ai_start(message: types.Message):
         )
         logger.info(f"User {message.from_user.id} registered in users_collection")
     except Exception as e:
-        logger.error(f"خطا در ارسال پیام خوش‌آمد AI: {e}")
+        logger.error(f"خطا در شروع چت AI: {e}")
         await message.reply("یه مشکلی پیش اومد، لطفاً دوباره امتحان کن!")
 
-# هندلر برای پیام‌های متنی با /ai
-@ai_router.message(RegexpCommandsFilter(regexp_commands=['ai (.+)']))
-async def handle_ai_message(message: types.Message, regexp_command: RegexpCommandsFilter):
-    user_input = regexp_command.group(1)  # گرفتن متن بعد از /ai
+# هندلر برای پیام‌های متنی در حالت چت
+@ai_router.message(AIStates.chatting)
+async def handle_ai_message(message: types.Message, state: FSMContext):
+    user_input = message.text
     user_id = message.from_user.id
     try:
         logger.info(f"دریافت پیام AI از کاربر {user_id}: {user_input}")
@@ -83,18 +90,18 @@ async def handle_ai_message(message: types.Message, regexp_command: RegexpComman
         await message.reply(reply)
         logger.info("پاسخ AI با موفقیت ارسال شد")
         
-        # ذخیره تعامل در MongoDB با expire_at
+        # ذخیره تعامل در MongoDB
         interactions_collection.insert_one({
             "user_id": str(user_id),
             "username": message.from_user.username or "unknown",
             "input": user_input,
             "response": reply,
             "timestamp": datetime.now(),
-            "expire_at": datetime.now()  # برای TTL Index
+            "expire_at": datetime.now()
         })
         logger.info(f"تعامل AI برای کاربر {user_id} در ai_interactions ذخیره شد")
         
-        # ثبت کاربر در users_collection (هماهنگ با db.py)
+        # ثبت کاربر در users_collection
         users_collection.update_one(
             {"user_id": str(user_id)},
             {"$set": {
@@ -109,6 +116,17 @@ async def handle_ai_message(message: types.Message, regexp_command: RegexpComman
         error_message = f"اوه، یه مشکلی پیش اومد: {str(e)}.\nلطفاً دوباره امتحان کن!"
         logger.error(f"خطا در پردازش پیام AI از کاربر {user_id}: {e}")
         await message.reply(error_message)
+
+# هندلر برای خروج از حالت AI
+@ai_router.message(Text(text="🔙 بازگشت به منوی اصلی"))
+async def exit_ai(message: types.Message, state: FSMContext):
+    try:
+        await state.clear()
+        await message.reply("به منوی اصلی برگشتی!", reply_markup=main_menu)  # main_menu باید از start.py وارد بشه
+        logger.info(f"User {message.from_user.id} exited AI mode")
+    except Exception as e:
+        logger.error(f"خطا در خروج از حالت AI: {e}")
+        await message.reply("یه مشکلی پیش اومد، لطفاً دوباره امتحان کن!")
 
 def register_handlers(dp: Dispatcher):
     dp.include_router(ai_router)
