@@ -1,9 +1,10 @@
 import logging
 import os
 from aiogram import Router, types
-from aiogram.filters import Text
+from aiogram.filters import Command, Text
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from datetime import datetime
 import google.generativeai as genai
 from database.db import db, users_collection
@@ -28,8 +29,8 @@ except Exception as e:
     logger.error(f"خطا در تنظیم جمینای: {e}")
     raise
 
-# روتر برای هندلرهای AI
-ai_router = Router()
+# روتر برای هندلرها
+router = Router()
 
 # Collection برای تعاملات AI
 interactions_collection = db["ai_interactions"]
@@ -41,18 +42,42 @@ try:
 except Exception as e:
     logger.error(f"خطا در تنظیم TTL Index: {e}")
 
+# تعریف منوی اصلی
+main_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📝 جزوات"), KeyboardButton(text="📚 کتاب‌ها")],
+        [KeyboardButton(text="🎬 ویدیوها"), KeyboardButton(text="🤖 توت یار")],
+    ],
+    resize_keyboard=True
+)
+
 # تعریف حالت‌ها
 class AIStates(StatesGroup):
     chatting = State()
 
+# هندلر برای /start
+@router.message(Command("start"))
+async def cmd_start(message: types.Message, state: FSMContext):
+    welcome_text = "سلام! به بات دانشگاه خوش اومدی! 😊 گزینه مورد نظرت رو انتخاب کن:"
+    try:
+        await state.clear()  # پاک کردن هر حالت قبلی
+        await message.reply(welcome_text, reply_markup=main_menu)
+        logger.info(f"Main menu sent to user: {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"خطا در ارسال منوی اصلی: {e}")
+        await message.reply("یه مشکلی پیش اومد، لطفاً دوباره امتحان کن!")
+
 # هندلر برای دکمه "توت یار"
-@ai_router.message(Text(text="🤖 توت یار"))
+@router.message(Text(text="🤖 توت یار"))
 async def ai_start(message: types.Message, state: FSMContext):
     info_text = "📌 اطلاعات چت شما تا 1 ساعت ذخیره می‌شود و بعد به‌صورت خودکار از دیتابیس حذف خواهد شد."
     welcome_text = "سلام! من توت یار هستم، دوستت برای درس و مشق! 😊 سؤالت رو بپرس، باهم حلش می‌کنیم!"
     try:
         await message.reply(info_text)
-        await message.reply(welcome_text)
+        await message.reply(welcome_text, reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="🔙 بازگشت به منوی اصلی")]],
+            resize_keyboard=True
+        ))
         await state.set_state(AIStates.chatting)
         logger.info(f"AI mode started for user: {message.from_user.id}")
         
@@ -71,10 +96,13 @@ async def ai_start(message: types.Message, state: FSMContext):
         await message.reply("یه مشکلی پیش اومد، لطفاً دوباره امتحان کن!")
 
 # هندلر برای پیام‌های متنی در حالت چت
-@ai_router.message(AIStates.chatting)
+@router.message(AIStates.chatting)
 async def handle_ai_message(message: types.Message, state: FSMContext):
     user_input = message.text
     user_id = message.from_user.id
+    if user_input == "🔙 بازگشت به منوی اصلی":
+        await exit_ai(message, state)
+        return
     try:
         logger.info(f"دریافت پیام AI از کاربر {user_id}: {user_input}")
         # ترکیب پرامپت اولیه با ورودی کاربر
@@ -118,16 +146,16 @@ async def handle_ai_message(message: types.Message, state: FSMContext):
         await message.reply(error_message)
 
 # هندلر برای خروج از حالت AI
-@ai_router.message(Text(text="🔙 بازگشت به منوی اصلی"))
+@router.message(Text(text="🔙 بازگشت به منوی اصلی"))
 async def exit_ai(message: types.Message, state: FSMContext):
     try:
         await state.clear()
-        await message.reply("به منوی اصلی برگشتی!", reply_markup=main_menu)  # main_menu باید از start.py وارد بشه
+        await message.reply("به منوی اصلی برگشتی!", reply_markup=main_menu)
         logger.info(f"User {message.from_user.id} exited AI mode")
     except Exception as e:
         logger.error(f"خطا در خروج از حالت AI: {e}")
         await message.reply("یه مشکلی پیش اومد، لطفاً دوباره امتحان کن!")
 
 def register_handlers(dp: Dispatcher):
-    dp.include_router(ai_router)
-    logger.info("هندلرهای AI ثبت شدند")
+    dp.include_router(router)
+    logger.info("هندلرهای عمومی و AI ثبت شدند")
