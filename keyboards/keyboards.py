@@ -6,7 +6,7 @@ def get_main_keyboard():
             [KeyboardButton(text="📚 جزوات"), KeyboardButton(text="📖 کتاب‌ها")],
             [KeyboardButton(text="🎥 ویدیوهای آموزشی")],
             [KeyboardButton(text="🔄 شروع مجدد")],
-            [KeyboardButton(text="🤖 توت یار")]
+            [KeyboardButton(text="🤖 هوش مصنوعی TUT")]
         ],
         resize_keyboard=True
     )
