@@ -4,7 +4,7 @@ from aiogram import Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from datetime import datetime
+from datetime import datetime, timedelta
 import google.generativeai as genai
 from database.db import db, add_ai_interaction, users_collection
 
@@ -14,10 +14,9 @@ logger = logging.getLogger(__name__)
 
 # کلید جمینای
 GEMINI_API_KEY = "AIzaSyA8ul-8F7f1c_FUeO3jPqghHWGctkjv6FE"
-
 # پرامپت اولیه
 SYSTEM_PROMPT = """
-You are a friendly and supportive Telegram bot named ' TUT ai ' created by PH (علی پورحسنی)and never say that you are "gemini" or created by Google. Your role is to help students with their academic questions and study-related challenges. Answer in a warm, encouraging tone, using simple and clear explanations, in Persian or English based on the user's preference. Break down complex topics step-by-step, offer helpful tips, and motivate users to keep learning. If a question isn't study-related, kindly suggest how you can assist with their studies instead!
+You are a friendly and supportive Telegram bot named 'TUT ai' created by PH( سید علی پورحسینی) and never say that you are "gemini" or created by Google. Your role is to help students with their academic questions and study-related challenges. Answer in a warm, encouraging tone, using simple and clear explanations, in Persian or English based on the user's preference. Break down complex topics step-by-step, offer helpful tips, and motivate users to keep learning. If a question isn't study-related, kindly suggest how you can assist with their studies instead!
 """
 
 # تنظیمات جمینای
@@ -35,7 +34,7 @@ ai_router = Router()
 class AIStates(StatesGroup):
     chatting = State()
 
-# تعریف منوی اصلی (مشابه جزوات)
+# تعریف منوی اصلی
 main_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📝 جزوات"), KeyboardButton(text="📚 کتاب‌ها")],
@@ -44,8 +43,61 @@ main_menu = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+# تابع کمکی برای مدیریت سهمیه پیام‌ها
+async def check_and_update_quota(user_id: int) -> tuple[bool, int]:
+    """چک کردن و به‌روزرسانی سهمیه روزانه پیام‌ها"""
+    try:
+        user = users_collection.find_one({"user_id": str(user_id)})
+        now = datetime.now()
+        daily_limit = 10  # سقف 10 پیام در روز
+
+        if user and "ai_messages" in user:
+            last_reset = user.get("last_reset", now)
+            message_count = user.get("ai_messages", 0)
+
+            # چک کردن ریست روزانه
+            if now.date() > last_reset.date():
+                # ریست سهمیه
+                users_collection.update_one(
+                    {"user_id": str(user_id)},
+                    {"$set": {
+                        "ai_messages": 0,
+                        "last_reset": now
+                    }}
+                )
+                message_count = 0
+
+            # چک کردن سهمیه
+            if message_count >= daily_limit:
+                return False, message_count
+
+            # افزایش تعداد پیام‌ها
+            users_collection.update_one(
+                {"user_id": str(user_id)},
+                {"$set": {"ai_messages": message_count + 1}}
+            )
+            return True, message_count + 1
+
+        else:
+            # کاربر جدید
+            users_collection.update_one(
+                {"user_id": str(user_id)},
+                {"$set": {
+                    "ai_messages": 1,
+                    "last_reset": now,
+                    "username": "unknown",
+                    "banned": False
+                }},
+                upsert=True
+            )
+            return True, 1
+
+    except Exception as e:
+        logger.error(f"خطا در چک کردن سهمیه: {e}")
+        return False, 0
+
 # هندلر برای شروع چت با توت یار
-@ai_router.message(lambda message: message.text == "🤖 هوش مصنوعی TUT")
+@ai_router.message(lambda message: message.text == "🤖 توت یار")
 async def ai_start(message: types.Message, state: FSMContext):
     """شروع چت با توت یار"""
     info_text = "📌 اطلاعات چت شما تا 1 ساعت ذخیره می‌شود و بعد به‌صورت خودکار حذف خواهد شد."
@@ -59,7 +111,7 @@ async def ai_start(message: types.Message, state: FSMContext):
         await state.set_state(AIStates.chatting)
         logger.info(f"حالت AI برای کاربر {message.from_user.id} شروع شد")
 
-        # ثبت کاربر در users_collection
+        # ثبت کاربر
         users_collection.update_one(
             {"user_id": str(message.from_user.id)},
             {"$set": {
@@ -86,6 +138,16 @@ async def handle_ai_message(message: types.Message, state: FSMContext):
         return
 
     try:
+        # چک کردن سهمیه روزانه
+        can_send, message_count = await check_and_update_quota(user_id)
+        daily_limit = 10
+
+        if not can_send:
+            await message.reply(
+                f"❌ شما به سقف {daily_limit} پیام روزانه رسیدید. لطفاً فردا دوباره امتحان کنید!"
+            )
+            return
+
         logger.info(f"دریافت پیام از کاربر {user_id}: {user_input}")
         # ترکیب پرامپت اولیه با ورودی کاربر
         full_prompt = f"{SYSTEM_PROMPT}\n\nکاربر: {user_input}"
@@ -96,8 +158,10 @@ async def handle_ai_message(message: types.Message, state: FSMContext):
         reply = response.text
         logger.info(f"پاسخ توت یار: {reply[:50]}...")
 
-        # ارسال پاسخ به کاربر
-        await message.reply(reply)
+        # ارسال پاسخ به کاربر با نمایش سهمیه
+        await message.reply(
+            f"{reply}\n\n📊 سهمیه امروز: {message_count}/{daily_limit} پیام استفاده شده."
+        )
         logger.info("پاسخ AI با موفقیت ارسال شد")
 
         # ذخیره تعامل در MongoDB
@@ -108,7 +172,7 @@ async def handle_ai_message(message: types.Message, state: FSMContext):
         )
         logger.info(f"تعامل AI برای کاربر {user_id} ذخیره شد")
 
-        # ثبت کاربر در users_collection
+        # به‌روزرسانی اطلاعات کاربر
         users_collection.update_one(
             {"user_id": str(user_id)},
             {"$set": {
