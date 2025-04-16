@@ -1,6 +1,6 @@
 import logging
 import os
-from aiogram import Router, types
+from aiogram import Router, types, Bot, Dispatcher
 from aiogram.filters import Command, RegexpCommandsFilter
 from pymongo import MongoClient
 from datetime import datetime
