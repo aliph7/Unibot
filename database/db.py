@@ -14,7 +14,7 @@ books_collection = db["books"]
 videos_collection = db["videos"]
 users_collection = db["users"]
 
-# مجموعه جدید برای تعاملات AI
+# مجموعه برای تعاملات AI
 ai_interactions_collection = db["ai_interactions"]
 
 def setup_database():
@@ -184,10 +184,10 @@ def is_user_banned(user_id):
 def get_user_count():
     try:
         unique_users = set()
-        for collection in [pamphlets_collection, books_collection, videos_collection]:
-            users = collection.distinct("uploaded_by")
+        for collection in [pamphlets_collection, books_collection, videos_collection, ai_interactions_collection]:
+            users = collection.distinct("user_id")
             unique_users.update(users)
-        logger.info(f"Retrieved {len(unique_users)} unique users: {list(unique_users)}")
+        logger.info(f"Retrieved {len(unique_users)} unique users")
         return len(unique_users)
     except Exception as e:
         logger.error(f"Error in get_user_count: {e}")
@@ -196,11 +196,11 @@ def get_user_count():
 def get_all_users():
     try:
         unique_users = set()
-        for collection in [pamphlets_collection, books_collection, videos_collection]:
-            users = collection.distinct("uploaded_by")
+        for collection in [pamphlets_collection, books_collection, videos_collection, ai_interactions_collection]:
+            users = collection.distinct("user_id")
             for user in users:
-                if user:  # مطمئن شو خالی نیست
-                    unique_users.add(str(user))  # همه رو به رشته تبدیل کن
+                if user:
+                    unique_users.add(str(user))
         result = []
         for user_id in unique_users:
             user = users_collection.find_one({"user_id": user_id})
@@ -223,24 +223,31 @@ def unban_user(user_id):
     except Exception as e:
         logger.error(f"Error in unban_user: {e}")
 
-def add_user(user_id):
+def add_user(user_id, username="unknown"):
     try:
         if not users_collection.find_one({"user_id": str(user_id)}):
-            users_collection.insert_one({"user_id": str(user_id), "banned": False})
+            users_collection.insert_one({
+                "user_id": str(user_id),
+                "username": username,
+                "banned": False,
+                "ai_messages": 0,
+                "last_reset": datetime.now()
+            })
             logger.info(f"Added user: {user_id}")
     except Exception as e:
         logger.error(f"Error in add_user: {e}")
 
 # توابع مربوط به تعاملات AI
-def add_ai_interaction(user_id, input_text, response_text):
+def add_ai_interaction(user_id, username, input_text, response_text):
     """ذخیره تعامل جدید با AI"""
     try:
         interaction = {
             "user_id": str(user_id),
+            "username": username or "unknown",
             "input": input_text,
             "response": response_text,
             "timestamp": datetime.now(),
-            "expire_at": datetime.now()  # برای TTL Index
+            "expire_at": datetime.now()
         }
         result = ai_interactions_collection.insert_one(interaction)
         logger.info(f"Added AI interaction for user: {user_id}")
@@ -249,15 +256,73 @@ def add_ai_interaction(user_id, input_text, response_text):
         logger.error(f"Error in add_ai_interaction: {e}")
         return None
 
-def get_ai_interactions(user_id=None):
-    """بازیابی تعاملات AI (اختیاری: بر اساس کاربر)"""
+def get_ai_interactions(user_id=None, limit=5):
+    """بازیابی تعاملات AI (اختیاری: بر اساس کاربر) با محدودیت تعداد"""
     try:
         query = {}
         if user_id:
             query["user_id"] = str(user_id)
-        interactions = list(ai_interactions_collection.find(query))
-        logger.info(f"Retrieved {len(interactions)} AI interactions")
+        interactions = list(
+            ai_interactions_collection.find(query)
+            .sort("timestamp", 1)  # مرتب‌سازی از قدیمی به جدید
+            .limit(limit)  # محدود به 5 تعامل آخر
+        )
+        logger.info(f"Retrieved {len(interactions)} AI interactions for user: {user_id or 'all'}")
         return interactions
     except Exception as e:
         logger.error(f"Error in get_ai_interactions: {e}")
         return []
+
+# تابع برای مدیریت سهمیه روزانه
+def check_and_update_ai_quota(user_id, username="unknown"):
+    """چک کردن و به‌روزرسانی سهمیه روزانه پیام‌های AI"""
+    try:
+        user = users_collection.find_one({"user_id": str(user_id)})
+        now = datetime.now()
+        daily_limit = 10
+
+        if user and "ai_messages" in user:
+            last_reset = user.get("last_reset", now)
+            message_count = user.get("ai_messages", 0)
+
+            # ریست سهمیه روزانه
+            if now.date() > last_reset.date():
+                users_collection.update_one(
+                    {"user_id": str(user_id)},
+                    {"$set": {
+                        "ai_messages": 0,
+                        "last_reset": now,
+                        "username": username
+                    }}
+                )
+                message_count = 0
+
+            # چک کردن سهمیه
+            if message_count >= daily_limit:
+                return False, message_count
+
+            # افزایش تعداد پیام‌ها
+            users_collection.update_one(
+                {"user_id": str(user_id)},
+                {"$set": {
+                    "ai_messages": message_count + 1,
+                    "username": username,
+                    "last_reset": last_reset
+                }}
+            )
+            return True, message_count + 1
+
+        else:
+            # کاربر جدید
+            users_collection.insert_one({
+                "user_id": str(user_id),
+                "username": username,
+                "banned": False,
+                "ai_messages": 1,
+                "last_reset": now
+            })
+            return True, 1
+
+    except Exception as e:
+        logger.error(f"Error in check_and_update_ai_quota: {e}")
+        return False, 0
