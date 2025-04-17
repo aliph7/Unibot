@@ -6,7 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from datetime import datetime, timedelta
 import google.generativeai as genai
-from database.db import db, add_ai_interaction, users_collection
+from database.db import db, add_ai_interaction, get_ai_interactions, users_collection
 
 # تنظیمات لاگ
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +17,6 @@ GEMINI_API_KEY = "AIzaSyA8ul-8F7f1c_FUeO3jPqghHWGctkjv6FE"
 # پرامپت اولیه
 SYSTEM_PROMPT = """
 You are a friendly and supportive Telegram bot named 'TUT ai' created by PH( سید علی پورحسینی) and never say that you are "gemini" or created by Google. Your role is to help students with their academic questions and study-related challenges. Answer in a warm, encouraging tone, using simple and clear explanations, in Persian or English based on the user's preference. Break down complex topics step-by-step, offer helpful tips, and motivate users to keep learning. If a question isn't study-related, kindly suggest how you can assist with their studies instead!
-"""
 
 # تنظیمات جمینای
 try:
@@ -96,8 +95,24 @@ async def check_and_update_quota(user_id: int) -> tuple[bool, int]:
         logger.error(f"خطا در چک کردن سهمیه: {e}")
         return False, 0
 
+# تابع کمکی برای ساخت تاریخچه مکالمه
+def build_conversation_history(user_id: str) -> str:
+    """بازیابی و ساخت تاریخچه مکالمه برای کاربر"""
+    try:
+        # گرفتن 5 تعامل آخر کاربر (برای جلوگیری از پر شدن پرامپت)
+        interactions = get_ai_interactions(user_id=user_id)
+        interactions = sorted(interactions, key=lambda x: x["timestamp"], reverse=True)[:5]
+        
+        history = ""
+        for interaction in reversed(interactions):  # از قدیمی به جدید
+            history += f"کاربر: {interaction['input']}\nتوت یار: {interaction['response']}\n\n"
+        return history
+    except Exception as e:
+        logger.error(f"خطا در ساخت تاریخچه مکالمه: {e}")
+        return ""
+
 # هندلر برای شروع چت با توت یار
-@ai_router.message(lambda message: message.text == "🤖 هوش مصنوعی TUT")
+@ai_router.message(lambda message: message.text == "🤖 توت یار")
 async def ai_start(message: types.Message, state: FSMContext):
     """شروع چت با توت یار"""
     info_text = "📌 اطلاعات چت شما تا 1 ساعت ذخیره می‌شود و بعد به‌صورت خودکار حذف خواهد شد."
@@ -149,8 +164,12 @@ async def handle_ai_message(message: types.Message, state: FSMContext):
             return
 
         logger.info(f"دریافت پیام از کاربر {user_id}: {user_input}")
-        # ترکیب پرامپت اولیه با ورودی کاربر
-        full_prompt = f"{SYSTEM_PROMPT}\n\nکاربر: {user_input}"
+        
+        # گرفتن تاریخچه مکالمه
+        conversation_history = build_conversation_history(str(user_id))
+        
+        # ترکیب پرامپت اولیه، تاریخچه و ورودی جدید
+        full_prompt = f"{SYSTEM_PROMPT}\n\n--- تاریخچه مکالمه ---\n{conversation_history}کاربر: {user_input}"
 
         # ارسال درخواست به جمینای
         logger.info("ارسال درخواست به جمینای...")
