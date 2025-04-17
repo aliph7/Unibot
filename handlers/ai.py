@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 # کلید جمینای
 GEMINI_API_KEY = "AIzaSyA8ul-8F7f1c_FUeO3jPqghHWGctkjv6FE"
-
 # پرامپت اولیه
 SYSTEM_PROMPT = """
 You are a friendly and supportive Telegram bot named 'TUT ai' created by PH( سید علی پورحسینی) and never say that you are "gemini" or created by Google. Your role is to help students with their academic questions and study-related challenges. Answer in a warm, encouraging tone, using simple and clear explanations, in Persian or English based on the user's preference. Break down complex topics step-by-step, offer helpful tips, and motivate users to keep learning. If a question isn't study-related, kindly suggest how you can assist with their studies instead!
@@ -50,7 +49,7 @@ def build_conversation_history(user_id: str) -> str:
     try:
         interactions = get_ai_interactions(user_id=user_id, limit=5)
         history = ""
-        for interaction in interactions:  # از قدیمی به جدید (چون get_ai_interactions مرتب شده)
+        for interaction in interactions:
             history += f"کاربر: {interaction['input']}\nتوت یار: {interaction['response']}\n\n"
         return history
     except Exception as e:
