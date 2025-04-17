@@ -57,7 +57,7 @@ def build_conversation_history(user_id: str) -> str:
         return ""
 
 # هندلر برای شروع چت با توت یار
-@ai_router.message(lambda message: message.text == "🤖 توت یار")
+@ai_router.message(lambda message: message.text == "🤖 هوش مصنوعی TUT")
 async def ai_start(message: types.Message, state: FSMContext):
     """شروع چت با توت یار"""
     info_text = "📌 اطلاعات چت شما تا 1 ساعت ذخیره می‌شود و بعد به‌صورت خودکار حذف خواهد شد."
