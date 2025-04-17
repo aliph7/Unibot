@@ -4,9 +4,9 @@ from aiogram import Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from datetime import datetime, timedelta
+from datetime import datetime
 import google.generativeai as genai
-from database.db import db, add_ai_interaction, get_ai_interactions, users_collection
+from database.db import db, add_ai_interaction, get_ai_interactions, users_collection, check_and_update_ai_quota
 
 # تنظیمات لاگ
 logging.basicConfig(level=logging.INFO)
@@ -14,9 +14,11 @@ logger = logging.getLogger(__name__)
 
 # کلید جمینای
 GEMINI_API_KEY = "AIzaSyA8ul-8F7f1c_FUeO3jPqghHWGctkjv6FE"
+
 # پرامپت اولیه
 SYSTEM_PROMPT = """
 You are a friendly and supportive Telegram bot named 'TUT ai' created by PH( سید علی پورحسینی) and never say that you are "gemini" or created by Google. Your role is to help students with their academic questions and study-related challenges. Answer in a warm, encouraging tone, using simple and clear explanations, in Persian or English based on the user's preference. Break down complex topics step-by-step, offer helpful tips, and motivate users to keep learning. If a question isn't study-related, kindly suggest how you can assist with their studies instead!
+"""
 
 # تنظیمات جمینای
 try:
@@ -42,69 +44,13 @@ main_menu = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# تابع کمکی برای مدیریت سهمیه پیام‌ها
-async def check_and_update_quota(user_id: int) -> tuple[bool, int]:
-    """چک کردن و به‌روزرسانی سهمیه روزانه پیام‌ها"""
-    try:
-        user = users_collection.find_one({"user_id": str(user_id)})
-        now = datetime.now()
-        daily_limit = 10  # سقف 10 پیام در روز
-
-        if user and "ai_messages" in user:
-            last_reset = user.get("last_reset", now)
-            message_count = user.get("ai_messages", 0)
-
-            # چک کردن ریست روزانه
-            if now.date() > last_reset.date():
-                # ریست سهمیه
-                users_collection.update_one(
-                    {"user_id": str(user_id)},
-                    {"$set": {
-                        "ai_messages": 0,
-                        "last_reset": now
-                    }}
-                )
-                message_count = 0
-
-            # چک کردن سهمیه
-            if message_count >= daily_limit:
-                return False, message_count
-
-            # افزایش تعداد پیام‌ها
-            users_collection.update_one(
-                {"user_id": str(user_id)},
-                {"$set": {"ai_messages": message_count + 1}}
-            )
-            return True, message_count + 1
-
-        else:
-            # کاربر جدید
-            users_collection.update_one(
-                {"user_id": str(user_id)},
-                {"$set": {
-                    "ai_messages": 1,
-                    "last_reset": now,
-                    "username": "unknown",
-                    "banned": False
-                }},
-                upsert=True
-            )
-            return True, 1
-
-    except Exception as e:
-        logger.error(f"خطا در چک کردن سهمیه: {e}")
-        return False, 0
-
 # تابع کمکی برای ساخت تاریخچه مکالمه
 def build_conversation_history(user_id: str) -> str:
     """بازیابی و ساخت تاریخچه مکالمه برای کاربر"""
     try:
-        # گرفتن 5 تعامل آخر کاربر (برای جلوگیری از پر شدن پرامپت)
-        interactions = get_ai_interactions(user_id=user_id)
-        interactions = sorted(interactions, key=lambda x: x["timestamp"], reverse=True)[:5]
-        
+        interactions = get_ai_interactions(user_id=user_id, limit=5)
         history = ""
-        for interaction in reversed(interactions):  # از قدیمی به جدید
+        for interaction in interactions:  # از قدیمی به جدید (چون get_ai_interactions مرتب شده)
             history += f"کاربر: {interaction['input']}\nتوت یار: {interaction['response']}\n\n"
         return history
     except Exception as e:
@@ -146,6 +92,7 @@ async def handle_ai_message(message: types.Message, state: FSMContext):
     """پردازش پیام‌های کاربر در حالت چت"""
     user_input = message.text
     user_id = message.from_user.id
+    username = message.from_user.username or "unknown"
 
     # بررسی بازگشت به منوی اصلی
     if user_input == "🔙 بازگشت به منوی اصلی":
@@ -154,7 +101,7 @@ async def handle_ai_message(message: types.Message, state: FSMContext):
 
     try:
         # چک کردن سهمیه روزانه
-        can_send, message_count = await check_and_update_quota(user_id)
+        can_send, message_count = check_and_update_ai_quota(user_id, username)
         daily_limit = 10
 
         if not can_send:
@@ -186,21 +133,11 @@ async def handle_ai_message(message: types.Message, state: FSMContext):
         # ذخیره تعامل در MongoDB
         add_ai_interaction(
             user_id=user_id,
+            username=username,
             input_text=user_input,
             response_text=reply
         )
         logger.info(f"تعامل AI برای کاربر {user_id} ذخیره شد")
-
-        # به‌روزرسانی اطلاعات کاربر
-        users_collection.update_one(
-            {"user_id": str(user_id)},
-            {"$set": {
-                "username": message.from_user.username or "unknown",
-                "banned": False
-            }},
-            upsert=True
-        )
-        logger.info(f"کاربر {user_id} در users_collection ثبت شد")
 
     except Exception as e:
         logger.error(f"خطا در پردازش پیام AI: {e}")
