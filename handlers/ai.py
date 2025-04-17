@@ -108,16 +108,16 @@ async def handle_ai_message(message: types.Message, state: FSMContext):
         await exit_ai(message, state)
         return
 
-    # try:
-        # چک کردن سهمیه روزانه
-        # can_send, message_count = check_and_update_ai_quota(user_id, username)
-        # daily_limit = 10
+    try:
+        چک کردن سهمیه روزانه
+        can_send, message_count = check_and_update_ai_quota(user_id, username)
+        daily_limit = 10
 
-        # if not can_send:
-        #     await message.reply(
-        #         f"❌ شما به سقف {daily_limit} پیام روزانه رسیدید. لطفاً فردا دوباره امتحان کنید!"
-        #     )
-        #     return
+        if not can_send:
+            await message.reply(
+                f"❌ شما به سقف {daily_limit} پیام روزانه رسیدید. لطفاً فردا دوباره امتحان کنید!"
+            )
+            return
 
         logger.info(f"دریافت پیام از کاربر {user_id}: {user_input}")
         
