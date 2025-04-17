@@ -47,10 +47,14 @@ main_menu = ReplyKeyboardMarkup(
 def build_conversation_history(user_id: str) -> str:
     """بازیابی و ساخت تاریخچه مکالمه برای کاربر"""
     try:
-        interactions = get_ai_interactions(user_id=user_id, limit=5)
-        history = ""
+        interactions = get_ai_interactions(user_id=user_id, limit=3)
+        if not interactions:
+            logger.info(f"No interactions found for user {user_id}")
+            return ""
+        history = "--- تاریخچه مکالمه ---\n"
         for interaction in interactions:
             history += f"کاربر: {interaction['input']}\nتوت یار: {interaction['response']}\n\n"
+        logger.info(f"Conversation history for user {user_id}: {history[:100]}...")
         return history
     except Exception as e:
         logger.error(f"خطا در ساخت تاریخچه مکالمه: {e}")
@@ -115,7 +119,7 @@ async def handle_ai_message(message: types.Message, state: FSMContext):
         conversation_history = build_conversation_history(str(user_id))
         
         # ترکیب پرامپت اولیه، تاریخچه و ورودی جدید
-        full_prompt = f"{SYSTEM_PROMPT}\n\n--- تاریخچه مکالمه ---\n{conversation_history}کاربر: {user_input}"
+        full_prompt = f"{SYSTEM_PROMPT}\n\n{conversation_history}کاربر: {user_input}\nپاسخ بده:"
 
         # ارسال درخواست به جمینای
         logger.info("ارسال درخواست به جمینای...")
@@ -130,13 +134,14 @@ async def handle_ai_message(message: types.Message, state: FSMContext):
         logger.info("پاسخ AI با موفقیت ارسال شد")
 
         # ذخیره تعامل در MongoDB
-        add_ai_interaction(
+        interaction_id = add_ai_interaction(
             user_id=user_id,
             username=username,
             input_text=user_input,
             response_text=reply
         )
-        logger.info(f"تعامل AI برای کاربر {user_id} ذخیره شد")
+        if not interaction_id:
+            logger.error(f"Failed to save interaction for user {user_id}")
 
     except Exception as e:
         logger.error(f"خطا در پردازش پیام AI: {e}")
@@ -152,6 +157,17 @@ async def exit_ai(message: types.Message, state: FSMContext):
     except Exception as e:
         logger.error(f"خطا در خروج از حالت AI: {e}")
         await message.reply("یه مشکلی پیش اومد، لطفاً دوباره امتحان کن!")
+
+# هندلر برای تست تاریخچه
+@ai_router.message(lambda message: message.text == "/history")
+async def check_history(message: types.Message):
+    """چک کردن تاریخچه مکالمه برای دیباگ"""
+    user_id = str(message.from_user.id)
+    history = build_conversation_history(user_id)
+    if history:
+        await message.reply(f"تاریخچه مکالمه شما:\n{history}")
+    else:
+        await message.reply("هیچ تاریخچه‌ای برای شما پیدا نشد!")
 
 def register_handlers(dp):
     """ثبت هندلرهای AI"""
