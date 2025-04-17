@@ -1,7 +1,7 @@
 from pymongo import MongoClient
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -247,16 +247,16 @@ def add_ai_interaction(user_id, username, input_text, response_text):
             "input": input_text,
             "response": response_text,
             "timestamp": datetime.now(),
-            "expire_at": datetime.now()
+            "expire_at": datetime.now() + timedelta(seconds=3600)  # دقیقاً 1 ساعت بعد
         }
         result = ai_interactions_collection.insert_one(interaction)
-        logger.info(f"Added AI interaction for user: {user_id}")
+        logger.info(f"Added AI interaction for user {user_id}: ID={result.inserted_id}, input={input_text[:50]}...")
         return result.inserted_id
     except Exception as e:
         logger.error(f"Error in add_ai_interaction: {e}")
         return None
 
-def get_ai_interactions(user_id=None, limit=5):
+def get_ai_interactions(user_id=None, limit=3):
     """بازیابی تعاملات AI (اختیاری: بر اساس کاربر) با محدودیت تعداد"""
     try:
         query = {}
@@ -264,10 +264,10 @@ def get_ai_interactions(user_id=None, limit=5):
             query["user_id"] = str(user_id)
         interactions = list(
             ai_interactions_collection.find(query)
-            .sort("timestamp", 1)  # مرتب‌سازی از قدیمی به جدید
-            .limit(limit)  # محدود به 5 تعامل آخر
+            .sort("timestamp", 1)  # از قدیمی به جدید
+            .limit(limit)  # محدود به 3 تعامل آخر
         )
-        logger.info(f"Retrieved {len(interactions)} AI interactions for user: {user_id or 'all'}")
+        logger.info(f"Retrieved {len(interactions)} AI interactions for user: {user_id or 'all'}, interactions={interactions}")
         return interactions
     except Exception as e:
         logger.error(f"Error in get_ai_interactions: {e}")
@@ -296,9 +296,11 @@ def check_and_update_ai_quota(user_id, username="unknown"):
                     }}
                 )
                 message_count = 0
+                logger.info(f"Quota reset for user {user_id}")
 
             # چک کردن سهمیه
             if message_count >= daily_limit:
+                logger.info(f"User {user_id} reached daily limit: {message_count}/{daily_limit}")
                 return False, message_count
 
             # افزایش تعداد پیام‌ها
@@ -310,6 +312,7 @@ def check_and_update_ai_quota(user_id, username="unknown"):
                     "last_reset": last_reset
                 }}
             )
+            logger.info(f"Updated quota for user {user_id}: {message_count + 1}/{daily_limit}")
             return True, message_count + 1
 
         else:
@@ -321,6 +324,7 @@ def check_and_update_ai_quota(user_id, username="unknown"):
                 "ai_messages": 1,
                 "last_reset": now
             })
+            logger.info(f"New user {user_id} added with quota: 1/{daily_limit}")
             return True, 1
 
     except Exception as e:
