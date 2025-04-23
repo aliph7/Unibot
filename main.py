@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # تنظیمات Webhook
 WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = os.getenv("BASE_URL", "https://unibot-vfzt.onrender.com") + WEBHOOK_PATH
+WEBHOOK_URL = os.getenv("BASE_URL", "https://unibot-x64l.onrender.com") + WEBHOOK_PATH
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = int(os.getenv("PORT", 8080))
 
