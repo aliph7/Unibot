@@ -28,7 +28,7 @@ You are a friendly and supportive Telegram bot named 'TUT ai' created by PH( س�
 # تنظیمات جمینای
 try:
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-2.0-flash")
 except Exception as e:
     logger.error(f"خطا در تنظیم جمینای: {e}")
     raise
